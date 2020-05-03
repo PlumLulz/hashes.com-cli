@@ -6,3 +6,6 @@ Dependencies:
 
 Usage:
 python hashes.py
+
+
+![image](https://i.imgur.com/davw0Vg.png)
