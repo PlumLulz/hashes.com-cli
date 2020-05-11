@@ -5,4 +5,4 @@ Usage:
 python hashes.py
 
 
-![image](https://i.imgur.com/davw0Vg.png)
+![image](https://i.imgur.com/mULXdnr.png)
