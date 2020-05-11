@@ -2,6 +2,7 @@ import os
 import sys
 import bs4
 import shlex
+import pickle
 import requests
 import readline
 import argparse
@@ -100,7 +101,7 @@ def get_stats(json):
 	print("Total value in escrow: ₿"+"{0:.7f}".format(escrowbtcvalue)+" / $"+"{0:.3f}".format(escrowusdvalue))
 
 # Creates requests session for actions that require you to be logged into hashes.com
-def login(email, password):
+def login(email, password, rememberme):
 	global session
 	session = requests.Session()
 	url = "https://hashes.com/en/login"
@@ -124,6 +125,10 @@ def login(email, password):
 		session = None
 	else:
 		print("Login successful.")
+		if rememberme:
+			with open("session.txt", "wb+") as sessionfile:
+				pickle.dump(session.cookies, sessionfile)
+			print("Wrote session data to: session.txt")
 
 # Gets paid recovery history from escrow
 def get_escrow_history():
@@ -165,15 +170,33 @@ def upload(algid, file):
 	else:
 		print("Something happened while uploading file.")
 
+# Confirm function
+def confirm(message):
+    c = input(message+" [y/n] ")
+    if c == "y":
+        return True
+    if c == "n":
+        return False
 
 # Print header at start of script
 print(header)
 
+# Check if there is an exisiting session saved
+if os.path.exists("session.txt"):
+	if confirm("Load saved session?"):
+		session = requests.session()
+		with open("session.txt", "rb") as sessionfile:
+			session.cookies.update(pickle.load(sessionfile))
+		print("Loaded existing session from session.txt")
+	else:
+		session = None
+else:
+	session = None
+
 # Start console
-session = None
 try:
 	while True:
-		cmd = input("hashes.com > ")
+		cmd = input("hashes.com~$ ")
 
 		if cmd[0:8] == "get jobs":
 			if len(cmd) > 8:
@@ -255,7 +278,7 @@ try:
 			table.add_row(["download", "Download or print jobs from escrow", "-jobid, -algid, -f, -p, --help"])
 			table.add_row(["stats", "Gets stats about hashes left in escrow", "-algid, --help"])
 			table.add_row(["upload", "Uploads founds to hashes.com. Must be logged in.", "-algid, -file, --help"])
-			table.add_row(["login", "Login to hashes.com for certain features", "Usage: 'login email@email.com'"])
+			table.add_row(["login", "Login to hashes.com for certain features", "-email -rememberme"])
 			table.add_row(["history", "Show your history with escrow. Must be logged in.", "No flags"])
 			table.add_row(["algs", "Gets algorithms hashes.com currently supports", "No flags"])
 			table.add_row(["logout", "Clears logged in session", "No flags"])
@@ -297,9 +320,17 @@ try:
 				table.add_row([aid, name])
 			print(table)
 		if cmd[0:5] == "login":
-			email = cmd[6:]
-			password = getpass()
-			login(email, password)
+			args = cmd[5:]
+			parser = argparse.ArgumentParser(description='Login to hashes.com', prog='login')
+			parser.add_argument("-email", help='Email to hashes.com account.', required=True)
+			parser.add_argument("-rememberme", help='Save session to reload after closing console.', action='store_true')
+			try:
+				parsed = parser.parse_args(shlex.split(args))
+				email = parsed.email
+				password = getpass()
+				login(email, password, parsed.rememberme)
+			except SystemExit:
+				None
 		if cmd[0:6] == "upload":
 			if session is not None:
 				uploadurl = "https://hashes.com/escrow/upload/"
