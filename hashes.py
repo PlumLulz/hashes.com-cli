@@ -196,7 +196,7 @@ else:
 # Start console
 try:
 	while True:
-		cmd = input("hashes.com~$ ")
+		cmd = input("hashes.com:~$ ")
 
 		if cmd[0:8] == "get jobs":
 			if len(cmd) > 8:
