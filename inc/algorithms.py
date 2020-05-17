@@ -1,4 +1,4 @@
-validalgs = {   '': 'select algo type...',
+validalgs = {
     '0': 'MD5',
     '10': 'md5($plaintext.$salt)',
     '100': 'SHA1',
