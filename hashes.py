@@ -131,7 +131,7 @@ def login(email, password, rememberme):
 			print("Wrote session data to: session.txt")
 
 # Gets paid recovery history from escrow
-def get_escrow_history():
+def get_escrow_history(reverse, limit):
 	uploadurl = "https://hashes.com/escrow/upload/"
 	get = session.get(uploadurl).text
 	bs = bs4.BeautifulSoup(get, features="html.parser")
@@ -151,6 +151,10 @@ def get_escrow_history():
 			finds = cells[6].find(text=True)
 			earned = cells[7].find(text=True)
 			table.add_row([str(cid), str(date), str(alg), str(status), str(total), str(lines), str(finds), str(earned)])
+	if reverse:
+		table = table[::-1]
+	if limit:
+		table = table[0:limit]
 	print(table)
 
 # Upload found hashes to hashes.com
@@ -354,7 +358,15 @@ try:
 				print("You are not logged in. Type 'help' for for info.")
 		if cmd[0:7] == "history":
 			if session is not None:
-				get_escrow_history()
+				args = cmd[7:]
+				parser = argparse.ArgumentParser(description='View history of submitted cracks.', prog='history')
+				parser.add_argument("-r", help='Reverse order of history.', required=False, action='store_true')
+				parser.add_argument("-limit", help='Number of rows to limit results.', required=False, type=int)
+				try:
+					parsed = parser.parse_args(shlex.split(args))
+					get_escrow_history(parsed.r, parsed.limit)
+				except SystemExit:
+					None
 			else:
 				print("You are not logged in. Type 'help' for info.")
 		if cmd[0:6] == "logout":
