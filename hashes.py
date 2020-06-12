@@ -157,6 +157,16 @@ def get_escrow_history(reverse, limit):
 		table = table[0:limit]
 	print(table)
 
+# Gets current balance in escrow
+def get_escrow_balance():
+	get = session.get("https://hashes.com/profile").text
+	bs = bs4.BeautifulSoup(get, features="html.parser")
+	history = bs.find("table", { "class" : "table text-center" })
+	rows = history.findAll("td")
+	balance = rows[4].find(text=True)
+	print(balance)
+
+
 # Upload found hashes to hashes.com
 def upload(algid, file):
 	uploadurl = "https://hashes.com/en/escrow/upload"
@@ -367,6 +377,11 @@ try:
 					get_escrow_history(parsed.r, parsed.limit)
 				except SystemExit:
 					None
+			else:
+				print("You are not logged in. Type 'help' for info.")
+		if cmd[0:7] == "balance":
+			if session is not None:
+				get_escrow_balance()
 			else:
 				print("You are not logged in. Type 'help' for info.")
 		if cmd[0:6] == "logout":
