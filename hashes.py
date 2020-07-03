@@ -214,6 +214,27 @@ def withdraw():
 	else:
 		print("You have canceled your withdraw request.")
 
+# Shows all withdraw requests
+def withdraw_requests():
+	url = "https://hashes.com/en/billing/withdraw"
+	get = session.get(url).text
+	bs = bs4.BeautifulSoup(get, features="html.parser")
+	history = bs.find("table", { "id" : "paidRecovery" })
+	table = PrettyTable()
+	table.field_names = ["Created", "Address", "Status", "Amount", "Fee", "Final", "Hash"]
+	table.align = "l"
+	for row in history.findAll("tr"):
+		cells = row.findAll("td")
+		if cells != []:
+			date = cells[0].find(text=True)
+			address = cells[1].find(text=True)
+			status = cells[2].find(text=True)
+			amount = cells[3].find(text=True)
+			fee = cells[4].find(text=True)
+			final = cells[5].find(text=True)
+			thash = cells[6].find(text=True)
+			table.add_row([str(date), str(address), str(status), str(amount), str(fee), str(final), str(thash)])
+	print(table)
 
 # Confirm function
 def confirm(message):
@@ -417,11 +438,16 @@ try:
 				get_escrow_balance()
 			else:
 				print("You are not logged in. Type 'help' for info.")
-		if cmd[0:8] == "withdraw":
+		if cmd == "withdraw":
 			if session is not None:
 				withdraw()
 			else:
-				print("You are not logged in. Type 'help for info.")
+				print("You are not logged in. Type 'help' for info.")
+		if cmd == "withdrawals":
+			if session is not None:
+				withdraw_requests()
+			else:
+				print("You are not logged in. Type 'help' for info.")
 		if cmd[0:6] == "logout":
 			if session is not None:
 				session = None
