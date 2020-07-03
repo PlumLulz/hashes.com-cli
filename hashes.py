@@ -184,6 +184,37 @@ def upload(algid, file):
 	else:
 		print("Something happened while uploading file.")
 
+# Withdraw funds from hashes.com to BTC address.
+def withdraw():
+	url = "https://hashes.com/en/billing/withdraw"
+	get = session.get(url).text
+	bs = bs4.BeautifulSoup(get, features="html.parser")
+	csrf = bs.find('input', {'name': 'csrf_token'})['value']
+	maxamount = bs.find('div', {'class': 'col'}).text.strip("\n")
+	fee = "0.0005"
+	btcaddr = input("Bitcoin Address: ")
+	amount = input(maxamount+": ")
+	if confirm("Are you sure you want to withdraw %s to %s? There will be a %s fee." % (amount, btcaddr, fee)):
+		data = {"csrf_token": csrf, "address": btcaddr, "amount": amount, "submitted": "true"}
+		post = session.post(url, data=data).text
+		bs2 = bs4.BeautifulSoup(post, features="html.parser")
+		error = bs2.find('p', attrs={'class':'mb-0'})
+		error2 = bs2.find("div", {"class": "my-center alert alert-dismissible alert-danger"})
+		success = bs2.find("div", {"class": "my-center alert alert-dismissible alert-success"})
+		if error is not None:
+			print(error.text.strip())
+		elif error2 is not None:
+			text = error2.text.replace("Alert", "").replace("×", "")
+			print(text.strip())
+		elif success is not None:
+			text = success.text.replace("Alert", "").replace("×", "")
+			print(text.strip())
+		else:
+			print("Something happened during withdraw request.")
+	else:
+		print("You have canceled your withdraw request.")
+
+
 # Confirm function
 def confirm(message):
     c = input(message+" [y/n] ")
@@ -294,6 +325,7 @@ try:
 			table.add_row(["upload", "Uploads founds to hashes.com. Must be logged in.", "-algid, -file, --help"])
 			table.add_row(["login", "Login to hashes.com for certain features", "-email, -rememberme"])
 			table.add_row(["history", "Show history of submitted cracks.", "-limit, -r"])
+			table.add_row(["withdraw", "Withdraw funds from hashes.com to BTC address.", "No flags"])
 			table.add_row(["balance", "Show BTC balance.", "No flags"])
 			table.add_row(["algs", "Gets algorithms hashes.com currently supports", "No flags"])
 			table.add_row(["logout", "Clears logged in session", "No flags"])
@@ -385,6 +417,11 @@ try:
 				get_escrow_balance()
 			else:
 				print("You are not logged in. Type 'help' for info.")
+		if cmd[0:8] == "withdraw":
+			if session is not None:
+				withdraw()
+			else:
+				print("You are not logged in. Type 'help for info.")
 		if cmd[0:6] == "logout":
 			if session is not None:
 				session = None
