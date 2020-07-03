@@ -347,6 +347,7 @@ try:
 			table.add_row(["login", "Login to hashes.com for certain features", "-email, -rememberme"])
 			table.add_row(["history", "Show history of submitted cracks.", "-limit, -r"])
 			table.add_row(["withdraw", "Withdraw funds from hashes.com to BTC address.", "No flags"])
+			table.add_row(["withdrawals", "Shows all withdrawals requests", "No flags"])
 			table.add_row(["balance", "Show BTC balance.", "No flags"])
 			table.add_row(["algs", "Gets algorithms hashes.com currently supports", "No flags"])
 			table.add_row(["logout", "Clears logged in session", "No flags"])
