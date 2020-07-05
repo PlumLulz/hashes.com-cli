@@ -221,7 +221,7 @@ def withdraw_requests():
 	bs = bs4.BeautifulSoup(get, features="html.parser")
 	history = bs.find("table", { "id" : "paidRecovery" })
 	table = PrettyTable()
-	table.field_names = ["Created", "Address", "Status", "Amount", "Fee", "Final", "Hash"]
+	table.field_names = ["Created", "Address", "Status", "Amount", "Fee", "Final", "Transaction Hash"]
 	table.align = "l"
 	for row in history.findAll("tr"):
 		cells = row.findAll("td")
