@@ -8,6 +8,7 @@ import readline
 import argparse
 from getpass import getpass
 from datetime import datetime
+from binascii import a2b_base64
 from prettytable import PrettyTable
 from inc.algorithms import validalgs
 from inc.header import header
@@ -100,6 +101,14 @@ def get_stats(json):
 	print("Hashes found: "+str(escrowfound))
 	print("Total value in escrow: ₿"+"{0:.7f}".format(escrowbtcvalue)+" / $"+"{0:.3f}".format(escrowusdvalue))
 
+# Converts data URI to binary and saves to jpeg
+def save_captcha(uri):
+	base64 = uri.split(",", 1)[1]
+	binary = a2b_base64(base64)
+	with open("captcha.jpg", "wb+") as img:
+		img.write(binary)
+	print("Downloaded captcha image to 'captcha.jpg'")
+
 # Creates requests session for actions that require you to be logged into hashes.com
 def login(email, password, rememberme):
 	global session
@@ -109,8 +118,9 @@ def login(email, password, rememberme):
 	bs = bs4.BeautifulSoup(get, features="html.parser")
 	csrf = bs.find('input', {'name': 'csrf_token'})['value']
 	captchaid = bs.find('input', {'name': 'captchaIdentifier'})['value']
-	captchaurl = bs.find(id="captcha").get("src")
-	print("Please open the following link and enter the captcha. https://hashes.com"+captchaurl)
+	uri = bs.findAll("div", {"class": "input-group mb-3"})[2].img.get('src')
+	save_captcha(uri)
+	print("Please open the captcha image saved to the current directory and enter it below.")
 	captcha = input("Captcha Code: ")
 	data = {"email": email, "password": password, "csrf_token": csrf, "captcha": captcha, "captchaIdentifier": captchaid, "ddos": "fi", "submitted": "1"}
 	post = session.post(url, data=data).text
@@ -125,6 +135,7 @@ def login(email, password, rememberme):
 		session = None
 	else:
 		print("Login successful.")
+		os.remove("captcha.jpg") 
 		if rememberme:
 			with open("session.txt", "wb+") as sessionfile:
 				pickle.dump(session.cookies, sessionfile)
