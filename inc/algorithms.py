@@ -76,7 +76,7 @@ validalgs = {
     '200': 'MySQL323',
     '20011': 'DiskCryptor SHA512 + XTS 512 bit (AES/Twofish/Serpent)',
     '20012': 'DiskCryptor SHA512 + XTS 1024 bit (AES-Twofish/Twofish-Serpent/Serpent-AES)',
-    '20013': ' DiskCryptor SHA512 + XTS 1536 bit (AES-Twofish-Serpent)',
+    '20013': 'DiskCryptor SHA512 + XTS 1536 bit (AES-Twofish-Serpent)',
     '20710': 'sha256(sha256($plaintext).$salt)',
     '20711': 'AuthMe sha256',
     '20800': 'sha256(md5($plaintext))',
