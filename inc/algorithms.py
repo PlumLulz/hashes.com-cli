@@ -16,6 +16,7 @@ validalgs = {
     '10900': 'PBKDF2-HMAC-SHA256',
     '11': 'Joomla < 2.5.18',
     '110': 'sha1($plaintext.$salt)',
+    '111': 'nsldaps, SSHA-1(Base64), Netscape LDAP SSHA',
     '11300': 'Bitcoin/Litecoin wallet.dat',
     '11600': '7-Zip',
     '11900': 'PBKDF2-HMAC-MD5',
