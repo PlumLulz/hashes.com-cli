@@ -17,7 +17,7 @@ from inc.header import header
 
 # Returns json of current jobs in escrow
 def get_jobs(sortby = 'createdAt', algid = None, reverse = True):
-	url = "https://hashes.com/escrow/viewjson/"
+	url = "https://hashes.com/en/escrow/viewjson/"
 	json = requests.get(url).json()
 	if algid is not None:
 		json2 = []
