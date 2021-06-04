@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import bs4
 import shlex
@@ -175,7 +176,10 @@ def get_escrow_balance():
 	history = bs.find("table", { "class" : "table text-center" })
 	rows = history.findAll("td")
 	balance = rows[4].find(text=True)
-	print(balance)
+	conversion = btc_to_usd(balance)
+	print("BTC: ₿%s" % (balance))
+	print("USD: $%s" % (conversion["converted"]))
+	print("\nCurrent BTC Price: $%s" % (conversion["currentprice"]))
 
 
 # Upload found hashes to hashes.com
@@ -201,11 +205,12 @@ def withdraw():
 	get = session.get(url).text
 	bs = bs4.BeautifulSoup(get, features="html.parser")
 	csrf = bs.find('input', {'name': 'csrf_token'})['value']
-	maxamount = bs.find('div', {'class': 'col'}).text.strip("\n")
+	maxamount = re.sub("[^0-9^.]", "", bs.find('div', {'class': 'col'}).text.strip("\n"))
 	fee = "0.0003"
 	btcaddr = input("Bitcoin Address: ")
-	amount = input(maxamount+": ")
-	if confirm("Are you sure you want to withdraw %s to %s? There will be a %s fee." % (amount, btcaddr, fee)):
+	amount = input("Bitcoin Amount(Max: %s / $%s): " % (maxamount, btc_to_usd(maxamount)["converted"]))
+	conversion = btc_to_usd(amount)
+	if confirm("Are you sure you want to withdraw %s / $%s to %s? There will be a %s fee." % (amount, conversion["converted"], btcaddr, fee)):
 		data = {"csrf_token": csrf, "address": btcaddr, "amount": amount, "submitted": "true"}
 		post = session.post(url, data=data).text
 		bs2 = bs4.BeautifulSoup(post, features="html.parser")
@@ -247,6 +252,15 @@ def withdraw_requests():
 			table.add_row([str(date), str(address), str(status), str(amount), str(fee), str(final), str(thash)])
 	print(table)
 
+# Converts BTC to USD
+def btc_to_usd(btc):
+	# BTC information provided by https://blockchain.info/
+	url = "https://blockchain.info/ticker"
+	resp = requests.get(url).json()
+	currentprice = resp["USD"]["15m"]
+	converted = "{0:.3f}".format(float(btc) * currentprice)
+	return {"currentprice": currentprice, "converted": converted}
+
 # Confirm function
 def confirm(message):
     c = input(message+" [y/n] ")
@@ -254,6 +268,8 @@ def confirm(message):
         return True
     if c == "n":
         return False
+
+
 
 # Print header at start of script
 print(header)
