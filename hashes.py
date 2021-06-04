@@ -202,7 +202,7 @@ def withdraw():
 	bs = bs4.BeautifulSoup(get, features="html.parser")
 	csrf = bs.find('input', {'name': 'csrf_token'})['value']
 	maxamount = bs.find('div', {'class': 'col'}).text.strip("\n")
-	fee = "0.0004"
+	fee = "0.0003"
 	btcaddr = input("Bitcoin Address: ")
 	amount = input(maxamount+": ")
 	if confirm("Are you sure you want to withdraw %s to %s? There will be a %s fee." % (amount, btcaddr, fee)):
