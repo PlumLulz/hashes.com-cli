@@ -372,7 +372,7 @@ try:
 			table.add_row(["stats", "Get stats about hashes left in escrow", "-algid, --help"])
 			table.add_row(["login", "Login to hashes.com", "-email, -rememberme"])
 			table.add_row(["upload", "Upload cracks to hashes.com *", "-algid, -file, --help"])
-			table.add_row(["history", "Show history of submitted cracks *", "-limit, -r"])
+			table.add_row(["history", "Show history of submitted cracks *", "-limit, -r, --help"])
 			table.add_row(["withdraw", "Withdraw funds from hashes.com to BTC address *", "No flags"])
 			table.add_row(["withdrawals", "Show all withdrawal requests *", "No flags"])
 			table.add_row(["balance", "Show BTC balance *", "No flags"])
