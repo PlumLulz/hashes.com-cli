@@ -297,8 +297,10 @@ try:
 				validsort = {"price": "pricePerHash", "total": "totalHashes", "left": "leftHashes", "found": "foundHashes", "lastcrack": "lastUpdate", "created": "createdAt"}
 				parser = argparse.ArgumentParser(description='Get escrow jobs from hashes.com', prog='get jobs')
 				parser.add_argument("-sortby", help='Parameter to sort jobs by.', default='created', choices=validsort)
-				parser.add_argument("-algid", help='Algorithm to filter jobs by. Multiple can be give e.g. 20,300,220', default=None)
 				parser.add_argument("-r", help='Reverse display order.', action='store_false')
+				g = parser.add_mutually_exclusive_group()
+				g.add_argument("-algid", help='Algorithm to filter jobs by. Multiple can be give e.g. 20,300,220', default=None)
+				g.add_argument("-jobid", help='Job ID to filter jobs by. Multiple can be give e.g. 1,2,3,4,5', default=None)
 				try:
 					parsed = parser.parse_args(shlex.split(args))
 					if parsed.algid is not None:
@@ -319,8 +321,22 @@ try:
 								print (parsed.algid+" not a valid algorithm ID.")
 							else:
 						 		jobs = get_jobs(validsort[parsed.sortby], [parsed.algid], parsed.r)
+					elif parsed.jobid is not None:
+						if "," in parsed.jobid:
+							jids = parsed.jobid.split(",")
+						else:
+							jids = [parsed.jobid]
+						jobs = get_jobs(validsort[parsed.sortby], None, parsed.r)
+						temp = []
+						for j in jobs:
+							if str(j["id"]) in jids:
+								temp.append(j)
+								jids.remove(str(j["id"]))
+						jobs = temp
+						if jids:
+							print("No valid jobs for ids: " + ",".join(jids))
 					else:
-						jobs = get_jobs(validsort[parsed.sortby], parsed.algid, parsed.r)
+					 	jobs = get_jobs(validsort[parsed.sortby], parsed.algid, parsed.r)
 				except SystemExit:
 					jobs = False
 					None
@@ -367,7 +383,7 @@ try:
 			table = PrettyTable()
 			table.field_names = ["Command", "Description", "Flags"]
 			table.align = "l"
-			table.add_row(["get jobs", "Get current jobs in escrow", "-algid, -sortby, -r, --help"])
+			table.add_row(["get jobs", "Get current jobs in escrow", "-algid, -jobid, -sortby, -r, --help"])
 			table.add_row(["download", "Download to file or print jobs from escrow", "-jobid, -algid, -f, -p, --help"])
 			table.add_row(["stats", "Get stats about hashes left in escrow", "-algid, --help"])
 			table.add_row(["login", "Login to hashes.com", "-email, -rememberme"])
