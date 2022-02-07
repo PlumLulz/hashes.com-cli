@@ -97,6 +97,7 @@ validalgs = {
     '22500': 'MultiBit Classic .key (MD5)',
     '2500': 'WPA/WPA2',
     '2501': 'WPA/WPA2 PMK',
+    '25600': 'bcrypt(md5($plaintext))',
     '2600': 'md5(md5($plaintext))',
     '2611': 'vBulletin < v3.8.5',
     '2612': 'PHPS',
