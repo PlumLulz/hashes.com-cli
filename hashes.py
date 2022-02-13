@@ -143,14 +143,12 @@ def login(email, password, rememberme):
 			print("Wrote session data to: session.txt")
 
 # Gets paid recovery history from escrow
-def get_escrow_history(reverse, limit):
+def get_escrow_history(reverse, limit, stats):
 	uploadurl = "https://hashes.com/escrow/upload/"
 	get = session.get(uploadurl).text
 	bs = bs4.BeautifulSoup(get, features="html.parser")
 	history = bs.find("table", { "id" : "paidRecovery" })
-	table = PrettyTable()
-	table.field_names = ["ID", "Created", "Algorithm", "Status", "Total Hashes", "Lines Processed", "Valid Finds", "Earned"]
-	table.align = "l"
+	data = []
 	for row in history.findAll("tr"):
 		cells = row.findAll("td")
 		if cells != []:
@@ -162,12 +160,51 @@ def get_escrow_history(reverse, limit):
 			lines = cells[5].find(text=True)
 			finds = cells[6].find(text=True)
 			earned = cells[7].find(text=True)
-			table.add_row([str(cid), str(date), str(alg), str(status), str(total), str(lines), str(finds), str(earned)])
-	if reverse:
-		table = table[::-1]
-	if limit:
-		table = table[0:limit]
-	print(table)
+			data.append([str(cid), str(date), str(alg), str(status), str(total), str(lines), str(finds), str(earned)])
+	if stats:
+		totalsub = 0
+		totalvalid = 0
+		totalearnedbtc = 0
+		totalearnedfiat = 0
+		algorithms = {}
+		for row in data:
+			split = row[7].split(" ", 1)
+			btc = split[0]
+			fiat = split[1][3:].rstrip(" USD)")
+			totalsub += int(row[4])
+			totalvalid += int(row[6])
+			totalearnedbtc += float(btc)
+			totalearnedfiat += float(fiat)
+			if row[2] not in algorithms:
+				algorithms[row[2]] = [row[4], row[6], btc, fiat]
+			else:
+				algorithms[row[2]] = [int(algorithms[row[2]][0]) + int(row[4]), int(algorithms[row[2]][1]) + int(row[6]), float(algorithms[row[2]][2]) + float(btc), float(algorithms[row[2]][3]) + float(fiat)]
+		table = PrettyTable()
+		table.field_names = ["Algorithm", "Hashes Submitted", "Valid Hashes Submitted", "Earned"]
+		table.align = "l"
+		for k,v in algorithms.items():
+			formatbtc = "{0:.7f}".format(float(v[2]))
+			formatfiat = "{0:.3f}".format(float(v[3]))
+			table.add_row([k] + v[:-2] + ["₿"+formatbtc+" / $"+formatfiat])
+		table.sortby = "Earned"
+		table.reversesort = True
+		print("USD prices are based on BTCs current price.")
+		print(table)
+		print("Total hashes submitted: %s" % (totalsub))
+		print("Total valid hashes submitted: %s" % (totalvalid))
+		print("Total earned: ₿%s / $%s" % ("{0:.7f}".format(totalearnedbtc), "{0:.3f}".format(totalearnedfiat)))
+	else:
+		table = PrettyTable()
+		table.field_names = ["ID", "Created", "Algorithm", "Status", "Total Hashes", "Lines Processed", "Valid Finds", "Earned"]
+		table.align = "l"
+		for row in data:
+			table.add_row(row)
+		if reverse:
+			table = table[::-1]
+		if limit:
+			table = table[0:limit]
+		print("USD prices are based on BTCs current price.")
+		print(table)
 
 # Gets current balance in escrow
 def get_escrow_balance():
@@ -388,7 +425,7 @@ try:
 			table.add_row(["stats", "Get stats about hashes left in escrow", "-algid, --help"])
 			table.add_row(["login", "Login to hashes.com", "-email, -rememberme"])
 			table.add_row(["upload", "Upload cracks to hashes.com *", "-algid, -file, --help"])
-			table.add_row(["history", "Show history of submitted cracks *", "-limit, -r, --help"])
+			table.add_row(["history", "Show history of submitted cracks *", "-limit, -r, -stats, --help"])
 			table.add_row(["withdraw", "Withdraw funds from hashes.com to BTC address *", "No flags"])
 			table.add_row(["withdrawals", "Show all withdrawal requests *", "No flags"])
 			table.add_row(["balance", "Show BTC balance *", "No flags"])
@@ -471,9 +508,10 @@ try:
 				parser = argparse.ArgumentParser(description='View history of submitted cracks.', prog='history')
 				parser.add_argument("-r", help='Reverse order of history.', required=False, action='store_true')
 				parser.add_argument("-limit", help='Number of rows to limit results.', required=False, type=int)
+				parser.add_argument("-stats", help='See history stats.', required=False, action='store_true')
 				try:
 					parsed = parser.parse_args(shlex.split(args))
-					get_escrow_history(parsed.r, parsed.limit)
+					get_escrow_history(parsed.r, parsed.limit, parsed.stats)
 				except SystemExit:
 					None
 			else:
