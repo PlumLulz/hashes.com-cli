@@ -335,6 +335,7 @@ try:
 				parser = argparse.ArgumentParser(description='Get escrow jobs from hashes.com', prog='get jobs')
 				parser.add_argument("-sortby", help='Parameter to sort jobs by.', default='created', choices=validsort)
 				parser.add_argument("-r", help='Reverse display order.', action='store_false')
+				parser.add_argument("-limit", help='Rows to limit results by.', default=None, type=int)
 				g = parser.add_mutually_exclusive_group()
 				g.add_argument("-algid", help='Algorithm to filter jobs by. Multiple can be give e.g. 20,300,220', default=None)
 				g.add_argument("-jobid", help='Job ID to filter jobs by. Multiple can be give e.g. 1,2,3,4,5', default=None)
@@ -374,16 +375,18 @@ try:
 							print("No valid jobs for ids: " + ",".join(jids))
 					else:
 					 	jobs = get_jobs(validsort[parsed.sortby], parsed.algid, parsed.r)
+					limit = parsed.limit
 				except SystemExit:
 					jobs = False
 					None
 			else:
 				jobs = get_jobs()
+				limit = None
 			if jobs:
 				table = PrettyTable()
 				table.field_names = ["Created", "ID", "Algorithm", "Total", "Found", "Left", "Max", "Price Per Hash"]
 				table.align = "l"
-				for rows in jobs:
+				for rows in jobs[0:limit] if limit else jobs:
 					ids = rows['id']
 					created = datetime.strptime(rows['createdAt'], '%Y-%m-%d %H:%M:%S').strftime("%m/%d/%y")
 					algorithm = rows['algorithmName']
@@ -420,7 +423,7 @@ try:
 			table = PrettyTable()
 			table.field_names = ["Command", "Description", "Flags"]
 			table.align = "l"
-			table.add_row(["get jobs", "Get current jobs in escrow", "-algid, -jobid, -sortby, -r, --help"])
+			table.add_row(["get jobs", "Get current jobs in escrow", "-algid, -jobid, -sortby, -r, -limit, --help"])
 			table.add_row(["download", "Download to file or print jobs from escrow", "-jobid, -algid, -f, -p, --help"])
 			table.add_row(["stats", "Get stats about hashes left in escrow", "-algid, --help"])
 			table.add_row(["login", "Login to hashes.com", "-email, -rememberme"])
