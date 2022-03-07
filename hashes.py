@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import bs4
+import time
 import shlex
 import pickle
 import requests
@@ -289,6 +290,23 @@ def withdraw_requests():
 			table.add_row([str(date), str(address), str(status), str(amount), str(fee), str(final), str(thash)])
 	print(table)
 
+# Watch status of job
+def watch(jobid, start, length):
+    data = []
+    elapsed = time.time() - start
+    if elapsed >=  60 * length:
+        print("\rWatch completed on job ID: %s\n" % (jobid), end='', flush=True)
+        return False
+    for j in get_jobs():
+        if str(j["id"]) == jobid:
+            data.append(j)
+    if data:
+        print("\rHashes cracked: %s" % (data[0]['foundHashes']), end='', flush=True)
+        return True
+    else:
+        print("\r%s is no longer a valid job ID.\n" % (jobid), end='', flush=True)
+        return False
+
 # Converts BTC to USD
 def btc_to_usd(btc):
 	# BTC information provided by https://blockchain.info/
@@ -426,6 +444,7 @@ try:
 			table.add_row(["get jobs", "Get current jobs in escrow", "-algid, -jobid, -sortby, -r, -limit, --help"])
 			table.add_row(["download", "Download to file or print jobs from escrow", "-jobid, -algid, -f, -p, --help"])
 			table.add_row(["stats", "Get stats about hashes left in escrow", "-algid, --help"])
+			table.add_row(["watch", "Watch status of job (updates every 10 seconds)", "-jobid, -length, --help"])
 			table.add_row(["login", "Login to hashes.com", "-email, -rememberme"])
 			table.add_row(["upload", "Upload cracks to hashes.com *", "-algid, -file, --help"])
 			table.add_row(["history", "Show history of submitted cracks *", "-limit, -r, -stats, --help"])
@@ -519,6 +538,19 @@ try:
 					None
 			else:
 				print("You are not logged in. Type 'help' for info.")
+		if cmd[0:5] == "watch":
+				args = cmd[5:]
+				parser = argparse.ArgumentParser(description='Watch status of job ID.', prog='watch')
+				parser.add_argument("-jobid", help='Job ID to watch.', required=True)
+				parser.add_argument("-length", help='Length in minutes to watch job.', required=False, default=5, type=int)
+				try:
+					parsed = parser.parse_args(shlex.split(args))
+					stime = time.time()
+					print ("Watching job ID: %s\n" % (parsed.jobid))
+					while watch(parsed.jobid, stime, parsed.length):
+						time.sleep(10)
+				except SystemExit:
+					None
 		if cmd[0:7] == "balance":
 			if session is not None:
 				get_escrow_balance()
