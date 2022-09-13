@@ -6,4 +6,4 @@ python3 hashes.py
 
 BTC current price data provided by https://blockchain.info/
 
-![image](https://i.imgur.com/h08XES8.png)
+![image](https://i.imgur.com/bhu3tPG.png)
