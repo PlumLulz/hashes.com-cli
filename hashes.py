@@ -445,7 +445,7 @@ try:
 			table.add_row(["download", "Download to file or print jobs from escrow", "-jobid, -algid, -f, -p, --help"])
 			table.add_row(["stats", "Get stats about hashes left in escrow", "-algid, --help"])
 			table.add_row(["watch", "Watch status of job (updates every 10 seconds)", "-jobid, -length, --help"])
-			table.add_row(["algs", "Get algorithms hashes.com currently supports", "--algid, --help"])
+			table.add_row(["algs", "Get algorithms hashes.com currently supports", "-algid, --help"])
 			table.add_row(["login", "Login to hashes.com", "-email, -rememberme"])
 			table.add_row(["upload", "Upload cracks to hashes.com *", "-algid, -file, --help"])
 			table.add_row(["history", "Show history of submitted cracks *", "-limit, -r, -stats, --help"])
