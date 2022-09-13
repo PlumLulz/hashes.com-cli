@@ -445,13 +445,13 @@ try:
 			table.add_row(["download", "Download to file or print jobs from escrow", "-jobid, -algid, -f, -p, --help"])
 			table.add_row(["stats", "Get stats about hashes left in escrow", "-algid, --help"])
 			table.add_row(["watch", "Watch status of job (updates every 10 seconds)", "-jobid, -length, --help"])
+			table.add_row(["algs", "Get algorithms hashes.com currently supports", "--algid, --help"])
 			table.add_row(["login", "Login to hashes.com", "-email, -rememberme"])
 			table.add_row(["upload", "Upload cracks to hashes.com *", "-algid, -file, --help"])
 			table.add_row(["history", "Show history of submitted cracks *", "-limit, -r, -stats, --help"])
 			table.add_row(["withdraw", "Withdraw funds from hashes.com to BTC address *", "No flags"])
 			table.add_row(["withdrawals", "Show all withdrawal requests *", "No flags"])
 			table.add_row(["balance", "Show BTC balance *", "No flags"])
-			table.add_row(["algs", "Get algorithms hashes.com currently supports", "No flags"])
 			table.add_row(["logout", "Clear logged in session *", "No flags"])
 			table.add_row(["clear", "Clear console", "No flags"])
 			table.add_row(["exit", "Exit console", "No flags"])
@@ -484,13 +484,30 @@ try:
 			except SystemExit:
 				None
 		if cmd[0:4] == "algs":
-			print("List of algorithms hashes.com currently supports.")
-			table = PrettyTable()
-			table.field_names = ["ID", "Algorithm"]
-			table.align = "l"
-			for aid, name in validalgs.items():
-				table.add_row([aid, name])
-			print(table)
+			args = cmd[4:]
+			parser = argparse.ArgumentParser(description='List of all algorithms that hashes.com supports', prog='algs')
+			parser.add_argument("-algid", help='Algorithm ID to lookup. Multiple can be give e.g. 20,300,220', default=None)
+
+			try:
+				parsed = parser.parse_args(shlex.split(args))
+				if parsed.algid:
+					ids = parsed.algid.split(",")
+				table = PrettyTable()
+				table.field_names = ["ID", "Algorithm"]
+				table.align = "l"
+				for aid, name in validalgs.items():
+					if parsed.algid:
+						if aid in ids:
+							table.add_row([aid, name])
+							ids.remove(aid)
+					else:
+						table.add_row([aid, name])
+				print(table)
+				if parsed.algid:
+					if ids is not None:
+						print("%s not currently supported." % (",".join(ids)))
+			except SystemExit:
+				None
 		if cmd[0:5] == "login":
 			args = cmd[5:]
 			parser = argparse.ArgumentParser(description='Login to hashes.com', prog='login')
