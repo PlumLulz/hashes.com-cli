@@ -504,7 +504,7 @@ try:
 						table.add_row([aid, name])
 				print(table)
 				if parsed.algid:
-					if ids is not None:
+					if len(ids) > 0:
 						print("%s not currently supported." % (",".join(ids)))
 			except SystemExit:
 				None
