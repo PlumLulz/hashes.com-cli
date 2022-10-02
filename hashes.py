@@ -445,7 +445,7 @@ try:
 			table.add_row(["download", "Download to file or print jobs from escrow", "-jobid, -algid, -f, -p, --help"])
 			table.add_row(["stats", "Get stats about hashes left in escrow", "-algid, --help"])
 			table.add_row(["watch", "Watch status of job (updates every 10 seconds)", "-jobid, -length, --help"])
-			table.add_row(["algs", "Get algorithms hashes.com currently supports", "-algid, --help"])
+			table.add_row(["algs", "Get the algorithms hashes.com currently supports", "-algid, -search, --help"])
 			table.add_row(["login", "Login to hashes.com", "-email, -rememberme"])
 			table.add_row(["upload", "Upload cracks to hashes.com *", "-algid, -file, --help"])
 			table.add_row(["history", "Show history of submitted cracks *", "-limit, -r, -stats, --help"])
@@ -487,6 +487,7 @@ try:
 			args = cmd[4:]
 			parser = argparse.ArgumentParser(description='List of all algorithms that hashes.com supports', prog='algs')
 			parser.add_argument("-algid", help='Algorithm ID to lookup. Multiple can be give e.g. 20,300,220', default=None)
+			parser.add_argument("-search", help='Search algorithm by name.', default=None)
 
 			try:
 				parsed = parser.parse_args(shlex.split(args))
@@ -495,14 +496,23 @@ try:
 				table = PrettyTable()
 				table.field_names = ["ID", "Algorithm"]
 				table.align = "l"
+
 				for aid, name in validalgs.items():
 					if parsed.algid:
 						if aid in ids:
 							table.add_row([aid, name])
 							ids.remove(aid)
+					elif parsed.search:
+						if parsed.search.upper() in name.upper():
+							table.add_row([aid, name])
 					else:
 						table.add_row([aid, name])
-				print(table)
+
+				if len(table.get_string()) > 75:
+					print(table)
+				else:
+					if parsed.search:
+						print("No results found for '%s'" % (parsed.search))
 				if parsed.algid:
 					if len(ids) > 0:
 						print("%s not currently supported." % (",".join(ids)))
