@@ -293,18 +293,34 @@ def withdraw_requests():
 # Watch status of job
 def watch(jobid, start, length):
     data = []
+    bid =[]
+    # This is used to count how many lines are going to be displayed
+    # Starts at 4 to account for the 3 line header and 1 line bottom
+    count = 4
+    jobid = jobid.split(",")
     elapsed = time.time() - start
     if elapsed >=  60 * length:
-        print("\rWatch completed on job ID: %s\n" % (jobid), end='', flush=True)
-        return False
+    	print("\033[2F\033[J", end="")
+    	print("Watch completed on job IDs: %s\n" % (",".join(jobid)), end="")
+    	return False
     for j in get_jobs():
-        if str(j["id"]) == jobid:
+        if str(j["id"]) in jobid:
             data.append(j)
+            count += 1
+            jobid.remove(str(j["id"]))
     if data:
-        print("\rHashes cracked: %s" % (data[0]['foundHashes']), end='', flush=True)
-        return True
+    	table = PrettyTable()
+    	table.field_names = ["ID", "Hashes Cracked"]
+    	table.align = "l"
+    	for row in data:
+    		table.add_row([row['id'], row['foundHashes']])
+    	print(table)
+    	if len(jobid) > 0:
+    		count += 1
+    		print("Job IDs %s are no longer valid." % (",".join(jobid)))
+    	return count
     else:
-        print("\r%s is no longer a valid job ID.\n" % (jobid), end='', flush=True)
+        print("Job IDs %s are no longer valid." % (",".join(jobid)))
         return False
 
 # Converts BTC to USD
@@ -355,8 +371,8 @@ try:
 				parser.add_argument("-r", help='Reverse display order.', action='store_false')
 				parser.add_argument("-limit", help='Rows to limit results by.', default=None, type=int)
 				g = parser.add_mutually_exclusive_group()
-				g.add_argument("-algid", help='Algorithm to filter jobs by. Multiple can be give e.g. 20,300,220', default=None)
-				g.add_argument("-jobid", help='Job ID to filter jobs by. Multiple can be give e.g. 1,2,3,4,5', default=None)
+				g.add_argument("-algid", help='Algorithm to filter jobs by. Multiple can be given e.g. 20,300,220', default=None)
+				g.add_argument("-jobid", help='Job ID to filter jobs by. Multiple can be given e.g. 1,2,3,4,5', default=None)
 				try:
 					parsed = parser.parse_args(shlex.split(args))
 					if parsed.algid is not None:
@@ -444,7 +460,7 @@ try:
 			table.add_row(["get jobs", "Get current jobs in escrow", "-algid, -jobid, -sortby, -r, -limit, --help"])
 			table.add_row(["download", "Download to file or print jobs from escrow", "-jobid, -algid, -f, -p, --help"])
 			table.add_row(["stats", "Get stats about hashes left in escrow", "-algid, --help"])
-			table.add_row(["watch", "Watch status of job (updates every 10 seconds)", "-jobid, -length, --help"])
+			table.add_row(["watch", "Watch status of jobs (updates every 10 seconds)", "-jobid, -length, --help"])
 			table.add_row(["algs", "Get the algorithms hashes.com currently supports", "-algid, -search, --help"])
 			table.add_row(["login", "Login to hashes.com", "-email, -rememberme"])
 			table.add_row(["upload", "Upload cracks to hashes.com *", "-algid, -file, --help"])
@@ -460,7 +476,7 @@ try:
 		if cmd[0:5] == "stats":
 			args = cmd[5:]
 			parser = argparse.ArgumentParser(description='Get stats for hashes left in escrow from hashes.com', prog='stats')
-			parser.add_argument("-algid", help='Algorithm ID to sort stats by. Multiple can be give e.g. 20,300,220', default=None)
+			parser.add_argument("-algid", help='Algorithm ID to sort stats by. Multiple can be given e.g. 20,300,220', default=None)
 			try:
 				parsed = parser.parse_args(shlex.split(args))
 				if parsed.algid is not None:
@@ -486,7 +502,7 @@ try:
 		if cmd[0:4] == "algs":
 			args = cmd[4:]
 			parser = argparse.ArgumentParser(description='List of all algorithms that hashes.com supports', prog='algs')
-			parser.add_argument("-algid", help='Algorithm ID to lookup. Multiple can be give e.g. 20,300,220', default=None)
+			parser.add_argument("-algid", help='Algorithm ID to lookup. Multiple can be given e.g. 20,300,220', default=None)
 			parser.add_argument("-search", help='Search algorithm by name.', default=None)
 
 			try:
@@ -568,14 +584,24 @@ try:
 		if cmd[0:5] == "watch":
 				args = cmd[5:]
 				parser = argparse.ArgumentParser(description='Watch status of job ID.', prog='watch')
-				parser.add_argument("-jobid", help='Job ID to watch.', required=True)
+				parser.add_argument("-jobid", help='Job ID to watch. Multiple can be given e.g. 29374,29294,8', required=True)
 				parser.add_argument("-length", help='Length in minutes to watch job.', required=False, default=5, type=int)
 				try:
 					parsed = parser.parse_args(shlex.split(args))
 					stime = time.time()
-					print ("Watching job ID: %s\n" % (parsed.jobid))
-					while watch(parsed.jobid, stime, parsed.length):
+
+					# In order to use ANSI escape codes on Windows they must be activated first.
+					# The easiest way that I have found is to simply run the color command first
+					if sys.platform == 'win32':
+						os.system("color")
+
+					print ("Watching job IDs: %s\n" % (parsed.jobid))
+					while True:
+						count = watch(parsed.jobid, stime, parsed.length)
+						if count == False:
+							break
 						time.sleep(10)
+						print("\033[%sF\033[J" % (count), end="")
 				except SystemExit:
 					None
 		if cmd[0:7] == "balance":
