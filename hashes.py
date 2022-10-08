@@ -291,7 +291,7 @@ def withdraw_requests():
 	print(table)
 
 # Watch status of job
-def watch(jobid, start, length):
+def watch(jobid, start, length, prev):
     data = []
     bid =[]
     # This is used to count how many lines are going to be displayed
@@ -299,6 +299,7 @@ def watch(jobid, start, length):
     count = 4
     jobid = jobid.split(",")
     elapsed = time.time() - start
+    
     if elapsed >=  60 * length:
     	print("\033[2F\033[J", end="")
     	print("Watch completed on job IDs: %s\n" % (",".join(jobid)), end="")
@@ -320,8 +321,10 @@ def watch(jobid, start, length):
     		print("Job IDs %s are no longer valid." % (",".join(jobid)))
     	return count
     else:
-        print("Job IDs %s are no longer valid." % (",".join(jobid)))
-        return False
+    	if prev != None:
+    		print("\033[2F\033[J", end="")
+    	print("Job IDs %s are no longer valid." % (",".join(jobid)))
+    	return False
 
 # Converts BTC to USD
 def btc_to_usd(btc):
@@ -596,11 +599,13 @@ try:
 						os.system("color")
 
 					print ("Watching job IDs: %s\n" % (parsed.jobid))
+					prev = None
 					while True:
-						count = watch(parsed.jobid, stime, parsed.length)
+						count = watch(parsed.jobid, stime, parsed.length, prev)
 						if count == False:
 							break
 						time.sleep(10)
+						prev = count
 						print("\033[%sF\033[J" % (count), end="")
 				except SystemExit:
 					None
