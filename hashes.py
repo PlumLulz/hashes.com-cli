@@ -60,10 +60,15 @@ def download(jobid, algid, file, printr):
 			try:
 				with open(file, "ab+") as outfile:
 					for url in urls:
-						req = requests.get("http://hashes.com"+url, stream=True)
+						req = requests.get("http://hashes.com"+url, stream=True, headers={'Accept-Encoding': None})
+						total_size = int(req.headers.get('Content-Length'))
+						downloaded = 0
 						for chunk in req.iter_content(1024):
 							outfile.write(chunk)
-					print ("Wrote hashes to: "+file)
+							downloaded += len(chunk)
+							end = int(50 * downloaded / total_size)
+							print("\r[%s%s]%s MB/%s MB" % ('=' * end, ' ' * (50-end), "{0:.2f}".format(downloaded / float(1<<20)), "{0:.2f}".format(total_size / float(1<<20))), flush=True, end='')
+					print ("\nWrote hashes to: "+file)
 			except OSError as e:
 				print(e)
 
