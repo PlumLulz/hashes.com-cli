@@ -3,6 +3,7 @@ import re
 import sys
 import bs4
 import time
+import json
 import shlex
 import pickle
 import requests
@@ -337,6 +338,24 @@ def watch(jobid, start, length, prev):
     	print("Job IDs %s are no longer valid." % (",".join(jobid)))
     	return False
 
+# Check and update valid algorithm list
+def update_algs():
+	url = "https://hashes.com/en/algorithms/json"
+	json2 = requests.get(url).json()
+	if len(json2) > len(validalgs):
+		temp = {}
+		for alg in json2:
+			temp[str(alg['id'])] = alg['algorithmName']
+		new = set(temp) - set(validalgs)
+
+		with open("./inc/algorithms.py", "w+") as test:
+			test.write("validalgs = " + str(json.dumps(temp, indent=4)))
+			print("\nNew algorithms added to list:")
+			for nalg in new:
+				print("%s: %s" % (nalg, temp[nalg]))
+		print("\nIn order for update to be applied the script must be reloaded.")
+		exit()
+
 # Converts BTC to USD
 def btc_to_usd(btc):
 	# BTC information provided by https://blockchain.info/
@@ -355,7 +374,6 @@ def confirm(message):
         return False
 
 
-
 # Print header at start of script
 print(header)
 
@@ -370,6 +388,10 @@ if os.path.exists("session.txt"):
 		session = None
 else:
 	session = None
+
+# Check if valid algorithm list is updated
+update_algs()
+
 
 # Start console
 try:
