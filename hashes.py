@@ -20,16 +20,17 @@ from inc.header import header
 
 # Returns json of current jobs in escrow
 def get_jobs(sortby = 'createdAt', algid = None, reverse = True):
-	url = "https://hashes.com/en/escrow/viewjson/"
-	json = requests.get(url).json()
-	if algid is not None:
-		json2 = []
-		for rows in json:
-			if str(rows['algorithmId']) in algid:
-				json2.append(rows)
-		json = json2
-	json = sorted(json, key=lambda x : x[sortby], reverse=reverse)
-	return json
+	url = "https://hashes.com/en/api/jobs"
+	json1 = requests.get(url).json()
+	if json1["success"] == True:
+		if algid is not None:
+			json2 = []
+			for rows in json1['list']:
+				if str(rows['algorithmId']) in algid:
+					json2.append(rows)
+			json1 = json2
+		json1 = sorted(json1['list'], key=lambda x : x[sortby], reverse=reverse)
+		return json1
 
 # Downloads or prints jobs in escrow
 def download(jobid, algid, file, printr):
@@ -183,7 +184,7 @@ def get_escrow_history(reverse, limit, stats):
 		for row in data:
 			split = row[7].split(" ", 1)
 			btc = split[0]
-			fiat = split[1][3:].rstrip(" USD)")
+			fiat = 0
 			totalsub += int(row[4])
 			totalvalid += int(row[6])
 			totalearnedbtc += float(btc)
@@ -221,33 +222,28 @@ def get_escrow_history(reverse, limit, stats):
 
 # Gets current balance in escrow
 def get_escrow_balance():
-	get = session.get("https://hashes.com/profile").text
-	bs = bs4.BeautifulSoup(get, features="html.parser")
-	history = bs.find("table", { "class" : "table text-center" })
-	rows = history.findAll("td")
-	balance = rows[4].find(text=True)
-	conversion = btc_to_usd(balance)
-	print("BTC: ₿%s" % (balance))
-	print("USD: $%s" % (conversion["converted"]))
-	print("\nCurrent BTC Price: $%s" % (conversion["currentprice"]))
+	get = session.get("https://hashes.com/en/api/balance?key=%s" % (apikey)).json()
+	if get['success'] == True:
+		table = PrettyTable()
+		table.field_names = ["Currency", "Amount", "USD"]
+		table.align = "l"
+		get.pop('success')
+		for currency,value in get.items():
+			table.add_row([currency, value, "$"+to_usd(value, currency)["converted"]])
+		print(table)
 
 
 # Upload found hashes to hashes.com
 def upload(algid, file):
-	uploadurl = "https://hashes.com/en/escrow/upload"
-	get = session.get(uploadurl).text
-	bs = bs4.BeautifulSoup(get, features="html.parser")
-	csrf = bs.find('input', {'name': 'csrf_token'})['value']
-	data = {"csrf_token": csrf, "algo": algid, "submitted": "true"}
+	uploadurl =  "https://hashes.com/en/api/founds"
+	data = {"key": apikey, "algo": algid}
 	file = {"userfile": open(file, "rb")}
-	post = session.post(uploadurl, files=file, data=data).text
-	bs2 = bs4.BeautifulSoup(post, features="html.parser")
-	success = bs2.find("div", {"class": "my-center alert alert-dismissible alert-success"})
-	if success is not None:
-		print("".join([t for t in success.contents if type(t)==bs4.element.NavigableString]).strip())
-		print("Type 'history' to check progress.")
+	post = session.post(uploadurl, files=file, data=data).json()
+	if post["success"] == True:
+		print("File successfully uploaded.")
+		print("Use the 'history' command to check the status.")
 	else:
-		print("Something happened while uploading file.")
+		print("Failed to upload file!")
 
 # Withdraw funds from hashes.com to BTC address.
 def withdraw():
@@ -356,14 +352,17 @@ def update_algs():
 		print("\nIn order for update to be applied the script must be reloaded.")
 		exit()
 
-# Converts BTC to USD
-def btc_to_usd(btc):
-	# BTC information provided by https://blockchain.info/
-	url = "https://blockchain.info/ticker"
-	resp = requests.get(url).json()
-	currentprice = resp["USD"]["15m"]
-	converted = "{0:.3f}".format(float(btc) * currentprice)
-	return {"currentprice": currentprice, "converted": converted}
+# Converts crypto to USD values
+def to_usd(value, currency):
+	if currency == "BTC":
+		# BTC information provided by https://blockchain.info/
+		url = "https://blockchain.info/ticker"
+		resp = requests.get(url).json()
+		currentprice = resp["USD"]["15m"]
+		converted = "{0:.3f}".format(float(value) * currentprice)
+		return {"currentprice": currentprice, "converted": converted}
+	else:
+		return {"currentprice": "N/A", "converted": "N/A"}
 
 # Confirm function
 def confirm(message):
@@ -372,6 +371,9 @@ def confirm(message):
         return True
     if c == "n":
         return False
+
+
+## Initial checks and header
 
 
 # Print header at start of script
@@ -389,11 +391,21 @@ if os.path.exists("session.txt"):
 else:
 	session = None
 
+# Check if api key exists
+if os.path.exists("api.txt"):
+	with open("api.txt", "r") as apifile:
+		apikey = apifile.read()
+	print("Loaded API key from api.txt")
+else:
+	apikey = input("Enter API Key: ")
+	with open("api.txt", "w+") as apifile:
+		apifile.write(apikey)
+
 # Check if valid algorithm list is updated
 update_algs()
 
 
-# Start console
+## Start command line
 try:
 	while True:
 		cmd = input("hashes.com:~$ ")
@@ -454,7 +466,7 @@ try:
 				limit = None
 			if jobs:
 				table = PrettyTable()
-				table.field_names = ["Created", "ID", "Algorithm", "Total", "Found", "Left", "Max", "Price Per Hash"]
+				table.field_names = ["Created", "ID", "Algorithm", "Total", "Found", "Left", "Max", "Currency", "Price Per Hash"]
 				table.align = "l"
 				for rows in jobs[0:limit] if limit else jobs:
 					ids = rows['id']
@@ -464,8 +476,9 @@ try:
 					found = rows['foundHashes']
 					left = rows['leftHashes']
 					maxcracks = rows['maxCracksNeeded']
-					price = "₿"+rows['pricePerHash'] + " / $" + rows['pricePerHashUsd']
-					table.add_row([created, ids, algorithm, total, found, left, maxcracks, price])
+					currency = rows['currency']
+					price = rows['pricePerHash'] + " / $" + rows['pricePerHashUsd']
+					table.add_row([created, ids, algorithm, total, found, left, maxcracks, currency, price])
 				print(table)
 			else:
 				print ("No jobs found.")
@@ -584,7 +597,6 @@ try:
 				None
 		if cmd[0:6] == "upload":
 			if session is not None:
-				uploadurl = "https://hashes.com/escrow/upload/"
 				args = cmd[6:]
 				parser = argparse.ArgumentParser(description='Upload cracked hashes to hashes.com', prog='upload')
 				parser.add_argument("-algid", help='Algorithm ID of cracked hashes', required=True, default=None)
