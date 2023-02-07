@@ -173,8 +173,10 @@ def get_escrow_history(reverse, limit, stats):
 			total = cells[4].find(text=True)
 			lines = cells[5].find(text=True)
 			finds = cells[6].find(text=True)
-			earned = cells[7].find(text=True)
-			data.append([str(cid), str(date), str(alg), str(status), str(total), str(lines), str(finds), str(earned)])
+			btc = cells[7].find(text=True)
+			xmr = cells[8].find(text=True)
+			ltc = cells[9].find(text=True)
+			data.append([str(cid), str(date), str(alg), str(status), str(total), str(lines), str(finds), str(btc), str(xmr), str(ltc)])
 	if stats:
 		totalsub = 0
 		totalvalid = 0
@@ -209,7 +211,7 @@ def get_escrow_history(reverse, limit, stats):
 		print("Total earned: ₿%s / $%s" % ("{0:.7f}".format(totalearnedbtc), "{0:.3f}".format(totalearnedfiat)))
 	else:
 		table = PrettyTable()
-		table.field_names = ["ID", "Created", "Algorithm", "Status", "Total Hashes", "Lines Processed", "Valid Finds", "Earned"]
+		table.field_names = ["ID", "Created", "Algorithm", "Status", "Total Hashes", "Lines Processed", "Valid Finds", "BTC", "XMR", "LTC"]
 		table.align = "l"
 		for row in data:
 			table.add_row(row)
