@@ -27,7 +27,7 @@ def get_jobs(sortby = 'createdAt', algid = None, reverse = True, currency = None
 		if currency is not None:
 			json3 = []
 			for rows in json1:
-				if str(rows['currency']) in currency.split(","):
+				if str(rows['currency']) in currency.upper().split(","):
 					json3.append(rows)
 			json1 = json3
 		if algid is not None:
