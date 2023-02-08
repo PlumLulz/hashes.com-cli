@@ -19,23 +19,30 @@ from inc.header import header
 # Functions
 
 # Returns json of current jobs in escrow
-def get_jobs(sortby = 'createdAt', algid = None, reverse = True):
+def get_jobs(sortby = 'createdAt', algid = None, reverse = True, currency = None):
 	url = "https://hashes.com/en/api/jobs"
 	json1 = requests.get(url).json()
 	if json1["success"] == True:
+		json1 = json1['list']
+		if currency is not None:
+			json3 = []
+			for rows in json1:
+				if str(rows['currency']) in currency.split(","):
+					json3.append(rows)
+			json1 = json3
 		if algid is not None:
 			json2 = []
-			for rows in json1['list']:
+			for rows in json1:
 				if str(rows['algorithmId']) in algid:
 					json2.append(rows)
 			json1 = json2
-		json1 = sorted(json1['list'], key=lambda x : x[sortby], reverse=reverse)
+		json1 = sorted(json1, key=lambda x : x[sortby], reverse=reverse)
 		return json1
 
 # Downloads or prints jobs in escrow
-def download(jobid, algid, file, printr):
+def download(jobid, algid, file, printr, currency):
 	urls = []
-	jobs = get_jobs()
+	jobs = get_jobs(currency = currency)
 	if jobid is not None:
 		if "," in str(jobid):
 			jobid = jobid.split(",")
@@ -47,12 +54,16 @@ def download(jobid, algid, file, printr):
 				jobid.remove(str(rows['id']))
 		if jobid:
 			print (",".join(jobid) + " not valid jobs")
-	if algid is not None:
+	elif algid is not None:
 		for rows in jobs:
 			if str(rows['algorithmId']) == algid:
 				urls.append(rows['leftList'])
 		if not urls:
 			print ("No jobs for " + validalgs[algid])
+	else:
+		if currency is not None:
+			for rows in jobs:
+				urls.append(rows['leftList'])
 	if urls:
 		if printr:
 			for url in urls:
@@ -83,38 +94,63 @@ def download(jobid, algid, file, printr):
 # Gets stats about hashes that are left in escrow
 def get_stats(json):
 	stats = {}
+	btc,xmr,ltc = 0,0,0
 	for rows in json:
 		algid = rows['algorithmId']
+		currency = rows['currency']
 		neededleft = float(rows['maxCracksNeeded']) - float(rows['foundHashes']) if rows['foundHashes'] > 0 else rows['maxCracksNeeded']
 		if algid in stats:
 			found = stats[algid]['totalFound'] + rows['foundHashes']
 			left = stats[algid]['totalLeft'] + rows['leftHashes']
 			usd = float(stats[algid]['totalUSD']) + float(rows['pricePerHashUsd']) * neededleft
-			btc = float(stats[algid]['totalBTC']) + float(rows['pricePerHash']) * neededleft
+			if currency == "BTC":
+				btc = float(stats[algid]['totalBTC']) + float(rows['pricePerHash']) * neededleft
+				xmr = float(stats[algid]['totalXMR'])
+				ltc = float(stats[algid]['totalLTC'])
+			elif currency == "XMR":
+				xmr = float(stats[algid]['totalXMR']) + float(rows['pricePerHash']) * neededleft
+				btc = float(stats[algid]['totalBTC'])
+				ltc = float(stats[algid]['totalLTC'])
+			elif currency == "LTC":
+				ltc = float(stats[algid]['totalLTC']) + float(rows['pricePerHash']) * neededleft
+				xmr = float(stats[algid]['totalXMR'])
+				btc = float(stats[algid]['totalBTC'])
 		else:
 			found = rows['foundHashes']
 			left = rows['leftHashes']
 			usd = float(rows['pricePerHashUsd']) * neededleft
-			btc = float(rows['pricePerHash']) * neededleft
-		stats[algid] = {"totalFound": found, "totalLeft": left, "totalUSD": "{0:.3f}".format(float(usd)), "totalBTC": "{0:.7f}".format(float(btc))}
+			if currency == "BTC":
+				btc = float(rows['pricePerHash']) * neededleft
+				xmr = 0
+				ltc = 0
+			elif currency == "XMR":
+				xmr = float(rows['pricePerHash']) * neededleft
+				btc = 0
+				ltc = 0
+			elif currency == "LTC":
+				ltc = float(rows['pricePerHash']) * neededleft
+				btc = 0
+				xmr = 0
+		stats[algid] = {"totalFound": found, "totalLeft": left, "totalUSD": "{0:.3f}".format(float(usd)), "totalBTC": "{0:.7f}".format(float(btc)), "totalXMR": "{0:.7f}".format(float(xmr)), "totalLTC": "{0:.7f}".format(float(ltc))}
 	table = PrettyTable()
-	table.field_names = ["ID", "Algorithm", "Left", "Found", "Total Value"]
+	table.field_names = ["ID", "Algorithm", "Left", "Found", "USD", "BTC", "XMR", "LTC"]
 	table.align = "l"
-	escrowleft = 0
-	escrowfound = 0
-	escrowbtcvalue = 0
-	escrowusdvalue = 0
+	escrowleft,escrowfound,escrowusdvalue,escrowbtcvalue,escrowxmrvalue,escrowltcvalue = 0,0,0,0,0,0
 	for aid in stats:
-		value = "₿"+stats[aid]['totalBTC'] + " / $" + stats[aid]['totalUSD']
 		escrowleft += stats[aid]['totalLeft']
 		escrowfound += stats[aid]['totalFound']
-		escrowbtcvalue += float(stats[aid]['totalBTC'])
 		escrowusdvalue += float(stats[aid]['totalUSD'])
-		table.add_row([aid, validalgs[str(aid)], stats[aid]['totalLeft'], stats[aid]['totalFound'], value])
+		escrowbtcvalue += float(stats[aid]['totalBTC'])
+		escrowxmrvalue += float(stats[aid]['totalXMR'])
+		escrowltcvalue += float(stats[aid]['totalLTC'])
+		table.add_row([aid, validalgs[str(aid)], stats[aid]['totalLeft'], stats[aid]['totalFound'], stats[aid]['totalUSD'], stats[aid]['totalBTC'], stats[aid]['totalXMR'], stats[aid]['totalLTC']])
 	print(table)
-	print("Hashes left: "+str(escrowleft))
-	print("Hashes found: "+str(escrowfound))
-	print("Total value in escrow: ₿"+"{0:.7f}".format(escrowbtcvalue)+" / $"+"{0:.3f}".format(escrowusdvalue))
+	print("Total hashes left: "+str(escrowleft))
+	print("Total hashes found: "+str(escrowfound))
+	print("Total USD value: $"+"{0:.3f}".format(escrowusdvalue))
+	print("Total BTC value: "+"{0:.7f}".format(escrowbtcvalue))
+	print("Total XMR value: "+"{0:.7f}".format(escrowxmrvalue))
+	print("Total LTC value: "+"{0:.7f}".format(escrowltcvalue))
 
 # Converts data URI to binary and saves to jpeg
 def save_captcha(uri):
@@ -178,37 +214,37 @@ def get_escrow_history(reverse, limit, stats):
 			ltc = cells[9].find(text=True)
 			data.append([str(cid), str(date), str(alg), str(status), str(total), str(lines), str(finds), str(btc), str(xmr), str(ltc)])
 	if stats:
-		totalsub = 0
-		totalvalid = 0
-		totalearnedbtc = 0
-		totalearnedfiat = 0
+		totalsub,totalvalid,totalearnedusd,totalearnedbtc,totalearnedxmr,totalearnedltc = 0,0,0,0,0,0
 		algorithms = {}
 		for row in data:
-			split = row[7].split(" ", 1)
-			btc = split[0]
-			fiat = 0
+			usd = 0
+			btc = row[7]
+			xmr = row[8]
+			ltc = row[9]
 			totalsub += int(row[4])
 			totalvalid += int(row[6])
+			totalearnedusd += float(usd)
 			totalearnedbtc += float(btc)
-			totalearnedfiat += float(fiat)
+			totalearnedxmr += float(xmr)
+			totalearnedltc += float(ltc)
 			if row[2] not in algorithms:
-				algorithms[row[2]] = [row[4], row[6], btc, fiat]
+				algorithms[row[2]] = [row[4], row[6], btc, xmr, ltc]
 			else:
-				algorithms[row[2]] = [int(algorithms[row[2]][0]) + int(row[4]), int(algorithms[row[2]][1]) + int(row[6]), float(algorithms[row[2]][2]) + float(btc), float(algorithms[row[2]][3]) + float(fiat)]
+				algorithms[row[2]] = [int(algorithms[row[2]][0]) + int(row[4]), int(algorithms[row[2]][1]) + int(row[6]), float(algorithms[row[2]][2]) + float(btc), float(algorithms[row[2]][3]) + float(xmr), float(algorithms[row[2]][4]) + float(ltc)]
 		table = PrettyTable()
-		table.field_names = ["Algorithm", "Hashes Submitted", "Valid Hashes Submitted", "Earned"]
+		table.field_names = ["Algorithm", "Hashes Submitted", "Valid Hashes Submitted", "BTC", "XMR", "LTC"]
 		table.align = "l"
 		for k,v in algorithms.items():
-			formatbtc = "{0:.7f}".format(float(v[2]))
-			formatfiat = "{0:.3f}".format(float(v[3]))
-			table.add_row([k] + v[:-2] + ["₿"+formatbtc+" / $"+formatfiat])
-		table.sortby = "Earned"
+			table.add_row([k, v[0], v[1], "{0:.7f}".format(float(v[2])), "{0:.7f}".format(float(v[3])), "{0:.7f}".format(float(v[4]))])
+		table.sortby = "BTC"
 		table.reversesort = True
 		print("USD prices are based on BTCs current price.")
 		print(table)
 		print("Total hashes submitted: %s" % (totalsub))
 		print("Total valid hashes submitted: %s" % (totalvalid))
-		print("Total earned: ₿%s / $%s" % ("{0:.7f}".format(totalearnedbtc), "{0:.3f}".format(totalearnedfiat)))
+		print("Total BTC earned: %s" % ("{0:.7f}".format(totalearnedbtc)))
+		print("Total XMR earned: %s" % ("{0:.7f}".format(totalearnedxmr)))
+		print("Total LTC earned: %s" % ("{0:.7f}".format(totalearnedltc)))
 	else:
 		table = PrettyTable()
 		table.field_names = ["ID", "Created", "Algorithm", "Status", "Total Hashes", "Lines Processed", "Valid Finds", "BTC", "XMR", "LTC"]
@@ -354,6 +390,16 @@ def update_algs():
 		print("\nIn order for update to be applied the script must be reloaded.")
 		exit()
 
+# Hash ID
+def hashid(hashh, extended):
+	url = "https://hashes.com/en/api/identifier?hash=%s&extended=%s" % (hashh, str(extended).lower())
+	get = requests.get(url).json()
+	if get['success'] == True:
+		for algs in get['algorithms']:
+			print(algs)
+	elif get['success'] == False:
+		print(get['message'])
+
 # Converts crypto to USD values
 def to_usd(value, currency):
 	if currency == "BTC":
@@ -420,6 +466,7 @@ try:
 				parser.add_argument("-sortby", help='Parameter to sort jobs by.', default='created', choices=validsort)
 				parser.add_argument("-r", help='Reverse display order.', action='store_false')
 				parser.add_argument("-limit", help='Rows to limit results by.', default=None, type=int)
+				parser.add_argument("-currency", help='Currenct to filter jobs by. Multiple can be given e.g. BTC,LTC', default=None)
 				g = parser.add_mutually_exclusive_group()
 				g.add_argument("-algid", help='Algorithm to filter jobs by. Multiple can be given e.g. 20,300,220', default=None)
 				g.add_argument("-jobid", help='Job ID to filter jobs by. Multiple can be given e.g. 1,2,3,4,5', default=None)
@@ -433,7 +480,7 @@ try:
 							if s is not None:
 								if len(d) > 0:
 									print (",".join(d)+" are not valid algorithm IDs.")
-								jobs = get_jobs(validsort[parsed.sortby], s, parsed.r)
+								jobs = get_jobs(validsort[parsed.sortby], s, parsed.r, parsed.currency)
 							else:
 								jobs = False
 								print (",".join(d)+ " are not valid algorithm IDs.")
@@ -442,13 +489,13 @@ try:
 								jobs = False
 								print (parsed.algid+" not a valid algorithm ID.")
 							else:
-						 		jobs = get_jobs(validsort[parsed.sortby], [parsed.algid], parsed.r)
+						 		jobs = get_jobs(validsort[parsed.sortby], [parsed.algid], parsed.r, parsed.currency)
 					elif parsed.jobid is not None:
 						if "," in parsed.jobid:
 							jids = parsed.jobid.split(",")
 						else:
 							jids = [parsed.jobid]
-						jobs = get_jobs(validsort[parsed.sortby], None, parsed.r)
+						jobs = get_jobs(validsort[parsed.sortby], None, parsed.r, parsed.currency)
 						temp = []
 						for j in jobs:
 							if str(j["id"]) in jids:
@@ -458,7 +505,7 @@ try:
 						if jids:
 							print("No valid jobs for ids: " + ",".join(jids))
 					else:
-					 	jobs = get_jobs(validsort[parsed.sortby], parsed.algid, parsed.r)
+					 	jobs = get_jobs(validsort[parsed.sortby], parsed.algid, parsed.r, parsed.currency)
 					limit = parsed.limit
 				except SystemExit:
 					jobs = False
@@ -487,9 +534,10 @@ try:
 		if cmd[0:8] == "download":
 				args = cmd[8:]
 				parser = argparse.ArgumentParser(description='Download escrow jobs from hashes.com', prog='download')
-				g1 = parser.add_mutually_exclusive_group(required=True)
-				g1.add_argument("-jobid", help='Job ID to download. Multiple IDs can be seperated with a comma. e.g. 3,4,5.')
-				g1.add_argument("-algid", help='Algorithm ID to download')
+				parser.add_argument("-currency", help='Crytocurrency to filter downloads by. Multiple can be given e.g. BTC,LTC', default=None)
+				g1 = parser.add_mutually_exclusive_group()
+				g1.add_argument("-jobid", help='Job ID to download. Multiple IDs can be seperated with a comma. e.g. 3,4,5.', default=None)
+				g1.add_argument("-algid", help='Algorithm ID to download', default=None)
 				g2 = parser.add_mutually_exclusive_group(required=True)
 				g2.add_argument("-f", help='Download to file.')
 				g2.add_argument("-p", help='Print to screen', action='store_true')
@@ -499,9 +547,9 @@ try:
 						if parsed.algid not in validalgs:	
 							print(parsed.algid+" is not a valid algorithm.")
 						else:
-							download(parsed.jobid, parsed.algid, parsed.f, parsed.p)
+							download(parsed.jobid, parsed.algid, parsed.f, parsed.p, parsed.currency)
 					else:
-						download(parsed.jobid, parsed.algid, parsed.f, parsed.p)
+						download(parsed.jobid, parsed.algid, parsed.f, parsed.p, parsed.currency)
 				except SystemExit:
 					None
 		if cmd[0:4] == "help":
@@ -513,6 +561,7 @@ try:
 			table.add_row(["stats", "Get stats about hashes left in escrow", "-algid, --help"])
 			table.add_row(["watch", "Watch status of jobs (updates every 10 seconds)", "-jobid, -length, --help"])
 			table.add_row(["algs", "Get the algorithms hashes.com currently supports", "-algid, -search, --help"])
+			table.add_row(["id", "Hash identifier", "-hash, -extended"])
 			table.add_row(["login", "Login to hashes.com", "-email, -rememberme"])
 			table.add_row(["upload", "Upload cracks to hashes.com *", "-algid, -file, --help"])
 			table.add_row(["history", "Show history of submitted cracks *", "-limit, -r, -stats, --help"])
@@ -656,6 +705,17 @@ try:
 						print("\033[%sF\033[J" % (count), end="")
 				except SystemExit:
 					None
+		if cmd[0:2] == "id":
+			args = cmd[2:]
+			parser = argparse.ArgumentParser(description='List potential hash algorithms for a given hash.', prog='id')
+			parser.add_argument("-hash", help="Hash to identify.", required=True)
+			parser.add_argument("-extended", help="Show extended results.", action='store_true')
+			try:
+				parsed = parser.parse_args(shlex.split(args))
+				print("Possible algorithms for '%s':" % (parsed.hash))
+				hashid(parsed.hash, parsed.extended)
+			except SystemExit:
+				None
 		if cmd[0:7] == "balance":
 			if session is not None:
 				get_escrow_balance()
