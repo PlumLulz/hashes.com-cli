@@ -169,7 +169,7 @@ def login(email, password, rememberme):
 	bs = bs4.BeautifulSoup(get, features="html.parser")
 	csrf = bs.find('input', {'name': 'csrf_token'})['value']
 	captchaid = bs.find('input', {'name': 'captchaIdentifier'})['value']
-	uri = bs.findAll("div", {"class": "input-group mb-3"})[2].img.get('src')
+	uri = bs.find("img", {"class": "img-fluid"}).get('src')
 	save_captcha(uri)
 	print("Please open the captcha image saved to the current directory and enter it below.")
 	captcha = input("Captcha Code: ")
@@ -447,6 +447,26 @@ def to_usd(value, currency):
 	else:
 		return {"currentprice": None, "converted": "N/A"}
 
+# Get recent logins
+def recent_logins(limit = None):
+	url = "https://hashes.com/en/profile"
+	get = session.get(url).text
+	bs = bs4.BeautifulSoup(get, features="html.parser")
+	loginhistory = bs.find("table", { "class" : "table table-hover table-striped" })
+	loginhistory.find("thead", { "class": "fw-bolder"}).decompose()
+	table = PrettyTable()
+	table.field_names = ["Created", "Status", "IP Addres", "Location"]
+	table.align = "l"
+	for row in loginhistory.findAll("tr")[0:limit]:
+		cells = row.findAll("td")
+		if cells != []:
+			date = cells[0].find(text=True)
+			status = cells[1].find(text=True)
+			ipaddress = cells[2].find(text=True)
+			location = cells[3].find(text=True)
+			table.add_row([str(date), str(status), str(ipaddress), str(location)])
+	print(table)
+
 # Confirm function
 def confirm(message):
     c = input(message+" [y/n] ")
@@ -487,6 +507,10 @@ else:
 # Check if valid algorithm list is updated
 update_algs()
 
+# If logged in display last 3 attempted logins
+if session is not None:
+	print("\nLast 3 login attempts:")
+	recent_logins(3)
 
 ## Start command line
 try:
@@ -674,17 +698,28 @@ try:
 		if cmd[0:5] == "login":
 			args = cmd[5:]
 			parser = argparse.ArgumentParser(description='Login to hashes.com', prog='login')
-			parser.add_argument("-email", help='Email to hashes.com account.', required=True)
+			g1 = parser.add_mutually_exclusive_group(required=True)
+			g1.add_argument("-email", help='Email to hashes.com account.', default=None)
+			g1.add_argument("-history", help='Show login history.', action='store_true')
 			parser.add_argument("-rememberme", help='Save session to reload after closing console.', action='store_true')
 			try:
 				parsed = parser.parse_args(shlex.split(args))
-				email = parsed.email
-				password = getpass()
-				login(email, password, parsed.rememberme)
+				if parsed.history:
+					if session is not None:
+						recent_logins()
+					else:
+						print("You must be logged in for this action.")
+				elif parsed.email is not None:
+					if session is None:
+						email = parsed.email
+						password = getpass()
+						login(email, password, parsed.rememberme)
+					else:
+						print("You are already logged in!")
 			except SystemExit:
 				None
 		if cmd[0:6] == "upload":
-			if session is not None:
+			if apikey is not None:
 				args = cmd[6:]
 				parser = argparse.ArgumentParser(description='Upload cracked hashes to hashes.com', prog='upload')
 				parser.add_argument("-algid", help='Algorithm ID of cracked hashes', required=True, default=None)
@@ -702,9 +737,9 @@ try:
 				except SystemExit:
 					None
 			else:
-				print("You are not logged in. Type 'help' for for info.")
+				print("API key is required for this action.")
 		if cmd[0:7] == "history":
-			if session is not None:
+			if apikey is not None:
 				args = cmd[7:]
 				parser = argparse.ArgumentParser(description='View history of submitted cracks.', prog='history')
 				parser.add_argument("-r", help='Reverse order of history.', required=False, action='store_true')
@@ -716,7 +751,7 @@ try:
 				except SystemExit:
 					None
 			else:
-				print("You are not logged in. Type 'help' for info.")
+				print("API key is required for this action.")
 		if cmd[0:5] == "watch":
 				args = cmd[5:]
 				parser = argparse.ArgumentParser(description='Watch status of job ID.', prog='watch')
@@ -754,45 +789,51 @@ try:
 			except SystemExit:
 				None
 		if cmd[0:6] == "lookup":
-			args = cmd[6:]
-			parser = argparse.ArgumentParser(description='Hash lookup', prog='lookup')
-			parser.add_argument("-verbose", help='Display algorithm of hashes that are found.', action='store_true')
-			g1 = parser.add_mutually_exclusive_group()
-			g1.add_argument("-infile", help='Input file with hashes to lookup', default=None)
-			g1.add_argument("-single", help='Sinlge line hash to lookup', default=None)
-			g2 = parser.add_mutually_exclusive_group(required=True)
-			g2.add_argument("-outfile", help='Output lookup results to a file', default=None)
-			g2.add_argument("-p", help='Print lookup results', action='store_true')
-			try:
-				parsed = parser.parse_args(shlex.split(args))
-				hashes = None
-				if parsed.single is not None:
-					hashes = [parsed.single]
-				elif parsed.infile is not None:
-					if os.path.exists(parsed.infile):
-						with open(parsed.infile) as infile:
-							hashes = infile.read().splitlines()
-					else:
-						print("The file '%s' does not exist." % (parsed.infile))
-				if hashes is not None:
-					credits = get_escrow_balance(p = False)['credits']
-					pcost = 1 + len(hashes)
-					if int(credits) > 1:
-						if pcost > int(credits):
-							print("Warning: Depending on search results, you may not have enough credits for this transaction.")
-						if confirm("This transaction has a potential cost of %s credits. You have a balance of %s credits. Continue?" % (pcost, credits)):
-							hash_lookup(hashes, parsed.outfile, parsed.p, parsed.verbose)
+			if apikey is not None:
+				args = cmd[6:]
+				parser = argparse.ArgumentParser(description='Hash lookup', prog='lookup')
+				parser.add_argument("-verbose", help='Display algorithm of hashes that are found.', action='store_true')
+				g1 = parser.add_mutually_exclusive_group()
+				g1.add_argument("-infile", help='Input file with hashes to lookup', default=None)
+				g1.add_argument("-single", help='Sinlge line hash to lookup', default=None)
+				g2 = parser.add_mutually_exclusive_group(required=True)
+				g2.add_argument("-outfile", help='Output lookup results to a file', default=None)
+				g2.add_argument("-p", help='Print lookup results', action='store_true')
+				try:
+					parsed = parser.parse_args(shlex.split(args))
+					hashes = None
+					if parsed.single is not None:
+						hashes = [parsed.single]
+					elif parsed.infile is not None:
+						if os.path.exists(parsed.infile):
+							with open(parsed.infile) as infile:
+								hashes = infile.read().splitlines()
 						else:
-							print("Lookup transaction canceled.")
-					else:
-						print("You don't have enough credits to process a lookup. You need at least 2 credits to process a lookup.")
-			except SystemExit:
-				None
+							print("The file '%s' does not exist." % (parsed.infile))
+					if hashes is not None:
+						if len(hashes) <= 250:
+							credits = get_escrow_balance(p = False)['credits']
+							pcost = 1 + len(hashes)
+							if int(credits) > 1:
+								if pcost > int(credits):
+									print("Warning: Depending on search results, you may not have enough credits for this transaction.")
+								if confirm("This transaction has a potential cost of %s credits. You have a balance of %s credits. Continue?" % (pcost, credits)):
+									hash_lookup(hashes, parsed.outfile, parsed.p, parsed.verbose)
+								else:
+									print("Lookup transaction canceled.")
+							else:
+								print("You don't have enough credits to process a lookup. You need at least 2 credits to process a lookup.")
+						else:
+							print("The maximum hashes allowed per request is 250!")
+				except SystemExit:
+					None
+			else:
+				print("API key is required for this action.")
 		if cmd[0:7] == "balance":
-			if session is not None:
+			if apikey is not None:
 				get_escrow_balance()
 			else:
-				print("You are not logged in. Type 'help' for info.")
+				print("API key is required for this action.")
 		if cmd == "withdraw":
 			if session is not None:
 				withdraw()
