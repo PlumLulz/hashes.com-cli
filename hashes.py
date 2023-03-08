@@ -148,9 +148,9 @@ def get_stats(json):
 	print("Total hashes left: "+str(escrowleft))
 	print("Total hashes found: "+str(escrowfound))
 	print("Total USD value: $"+"{0:.3f}".format(escrowusdvalue))
-	print("Total BTC value: %s / %s" % ("{0:.7f}".format(escrowbtcvalue), to_usd("{0:.7f}".format(escrowbtcvalue), "BTC")['converted']))
-	print("Total XMR value: %s / %s" % ("{0:.7f}".format(escrowxmrvalue), to_usd("{0:.7f}".format(escrowxmrvalue), "XMR")['converted']))
-	print("Total LTC value: %s / %s" % ("{0:.7f}".format(escrowltcvalue), to_usd("{0:.7f}".format(escrowltcvalue), "LTC")['converted']))
+	print("Total BTC value: %s / %s" % ("{0:.7f}".format(escrowbtcvalue), to_usd("{0:.7f}".format(escrowbtcvalue), "BTC")['converted'] if escrowbtcvalue > 0 else "$0.00"))
+	print("Total XMR value: %s / %s" % ("{0:.7f}".format(escrowxmrvalue), to_usd("{0:.7f}".format(escrowxmrvalue), "XMR")['converted'] if escrowxmrvalue > 0 else "$0.00"))
+	print("Total LTC value: %s / %s" % ("{0:.7f}".format(escrowltcvalue), to_usd("{0:.7f}".format(escrowltcvalue), "LTC")['converted'] if escrowltcvalue > 0 else "$0.00"))
 
 # Converts data URI to binary and saves to jpeg
 def save_captcha(uri):
@@ -239,9 +239,10 @@ def get_escrow_history(reverse, limit, stats):
 			print(table)
 			print("Total hashes submitted: %s" % (totalsub))
 			print("Total valid hashes submitted: %s" % (totalvalid))
-			print("Total BTC earned: %s" % ("{0:.7f}".format(totalearnedbtc)))
-			print("Total XMR earned: %s" % ("{0:.7f}".format(totalearnedxmr)))
-			print("Total LTC earned: %s" % ("{0:.7f}".format(totalearnedltc)))
+			print("Total BTC value: %s / %s" % ("{0:.7f}".format(totalearnedbtc), to_usd("{0:.7f}".format(totalearnedbtc), "BTC")['converted'] if totalearnedbtc > 0 else "$0.00"))
+			print("Total XMR value: %s / %s" % ("{0:.7f}".format(totalearnedxmr), to_usd("{0:.7f}".format(totalearnedxmr), "XMR")['converted'] if totalearnedxmr > 0 else "$0.00"))
+			print("Total LTC value: %s / %s" % ("{0:.7f}".format(totalearnedltc), to_usd("{0:.7f}".format(totalearnedltc), "LTC")['converted'] if totalearnedltc > 0 else "$0.00"))
+
 		else:
 			table = PrettyTable()
 			table.field_names = ["ID", "Created", "Algorithm", "Status", "Total Hashes", "Valid Finds", "BTC", "XMR", "LTC"]
@@ -264,7 +265,11 @@ def get_escrow_balance(p = True):
 			table.align = "l"
 			get.pop('success')
 			for currency,value in get.items():
-				table.add_row([currency, value, to_usd(value, currency)["converted"]])
+				if float(value) > 0:
+					usd  = to_usd(value, currency)["converted"]
+				else:
+					usd = "$0.00"
+				table.add_row([currency, value, usd])
 			print(table)
 		elif p == False:
 			return get
@@ -621,14 +626,14 @@ try:
 			table = PrettyTable()
 			table.field_names = ["Command", "Description", "Flags"]
 			table.align = "l"
-			table.add_row(["get jobs", "Get current jobs in escrow", "-algid, -jobid, -sortby, -r, -limit, --help"])
-			table.add_row(["download", "Download to file or print jobs from escrow", "-jobid, -algid, -f, -p, --help"])
+			table.add_row(["get jobs", "Get current jobs in escrow", "-algid, -jobid, -currency, -sortby, -r, -limit, --help"])
+			table.add_row(["download", "Download to file or print jobs from escrow", "-jobid, -algid, -currency, -f, -p, --help"])
 			table.add_row(["stats", "Get stats about hashes left in escrow", "-algid, --help"])
 			table.add_row(["watch", "Watch status of jobs (updates every 10 seconds)", "-jobid, -length, --help"])
 			table.add_row(["algs", "Get the algorithms hashes.com currently supports", "-algid, -search, --help"])
 			table.add_row(["lookup", "Hash lookup **", "-single, -infile, -outfile, -p, -verbose, --help"])
 			table.add_row(["id", "Hash identifier", "-hash, -extended, --help"])
-			table.add_row(["login", "Login to hashes.com", "-email, -rememberme"])
+			table.add_row(["login", "Login to hashes.com or view login history.", "-email, -rememberme, -history*, --help"])
 			table.add_row(["upload", "Upload cracks to hashes.com **", "-algid, -file, --help"])
 			table.add_row(["history", "Show history of submitted cracks **", "-limit, -r, -stats, --help"])
 			table.add_row(["withdraw", "Withdraw funds from hashes.com to BTC address *", "No flags"])
