@@ -471,10 +471,10 @@ def recent_logins(limit = None):
 	for row in loginhistory.findAll("tr")[0:limit]:
 		cells = row.findAll("td")
 		if cells != []:
-			date = cells[0].find(text=True)
-			status = cells[1].find(text=True)
-			ipaddress = cells[2].find(text=True)
-			location = cells[3].find(text=True)
+			date = cells[0].find(string=True)
+			status = cells[1].find(sting=True)
+			ipaddress = cells[2].find(string=True)
+			location = cells[3].find(string=True)
 			table.add_row([str(date), str(status), str(ipaddress), str(location)])
 	print(table)
 
