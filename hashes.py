@@ -472,7 +472,7 @@ def recent_logins(limit = None):
 		cells = row.findAll("td")
 		if cells != []:
 			date = cells[0].find(string=True)
-			status = cells[1].find(sting=True)
+			status = cells[1].find("span").text
 			ipaddress = cells[2].find(string=True)
 			location = cells[3].find(string=True)
 			table.add_row([str(date), str(status), str(ipaddress), str(location)])
