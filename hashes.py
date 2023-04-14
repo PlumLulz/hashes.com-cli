@@ -280,7 +280,7 @@ def upload(algid, file):
 	uploadurl =  "https://hashes.com/en/api/founds"
 	data = {"key": apikey, "algo": algid}
 	file = {"userfile": open(file, "rb")}
-	post = session.post(uploadurl, files=file, data=data).json()
+	post = requests.post(uploadurl, files=file, data=data).json()
 	if post["success"] == True:
 		print("File successfully uploaded.")
 		print("Use the 'history' command to check the status.")
