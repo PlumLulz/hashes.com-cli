@@ -257,7 +257,7 @@ def get_escrow_history(reverse, limit, stats):
 
 # Gets current balance in escrow
 def get_escrow_balance(p = True):
-	get = session.get("https://hashes.com/en/api/balance?key=%s" % (apikey)).json()
+	get = requests.get("https://hashes.com/en/api/balance?key=%s" % (apikey)).json()
 	if get['success'] == True:
 		if p == True:
 			table = PrettyTable()
