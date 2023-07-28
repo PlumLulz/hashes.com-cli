@@ -165,6 +165,7 @@ validalgs = {
     "26000": "Mozilla key3.db",
     "26100": "Mozilla key4.db",
     "26600": "MetaMask Wallet",
+    "26610": "MetaMask Wallet (short hash, plaintext check)",
     "28200": "Exodus Desktop Wallet (scrypt)",
     "28800": "Kerberos 5, etype 17, DB",
     "28900": "Kerberos 5, etype 18, DB"
