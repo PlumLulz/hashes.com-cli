@@ -19,8 +19,11 @@ from inc.header import header
 # Functions
 
 # Returns json of current jobs in escrow
-def get_jobs(sortby = 'createdAt', algid = None, reverse = True, currency = None):
-	url = "https://hashes.com/en/api/jobs"
+def get_jobs(sortby = 'createdAt', algid = None, reverse = True, currency = None, self = False):
+	if self == True:
+		url = "https://hashes.com/en/api/jobs_self"
+	else:
+		url = "https://hashes.com/en/api/jobs"
 	json1 = requests.get(url).json()
 	if json1["success"] == True:
 		json1 = json1['list']
@@ -540,6 +543,7 @@ try:
 				g = parser.add_mutually_exclusive_group()
 				g.add_argument("-algid", help='Algorithm to filter jobs by. Multiple can be given e.g. 20,300,220', default=None)
 				g.add_argument("-jobid", help='Job ID to filter jobs by. Multiple can be given e.g. 1,2,3,4,5', default=None)
+				g.add_argument("-self", help='Search jobs you have created.', action='store_true')
 				try:
 					parsed = parser.parse_args(shlex.split(args))
 					if parsed.algid is not None:
@@ -574,8 +578,10 @@ try:
 						jobs = temp
 						if jids:
 							print("No valid jobs for ids: " + ",".join(jids))
+					elif parsed.self == True:
+						jobs = get_jobs(validsort[parsed.sortby], None, parsed.r, parsed.currency, parsed.self)
 					else:
-					 	jobs = get_jobs(validsort[parsed.sortby], parsed.algid, parsed.r, parsed.currency)
+						jobs = get_jobs(validsort[parsed.sortby], None, parsed.r, parsed.currency)
 					limit = parsed.limit
 				except SystemExit:
 					jobs = False
