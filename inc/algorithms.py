@@ -149,6 +149,7 @@ validalgs = {
     "22300": "sha256($salt.$plaintext.$salt)",
     "22301": "Telegram client app passcode (SHA256)",
     "22500": "MultiBit Classic .key (MD5)",
+    "22700": "MultiBit HD (scrypt)",
     "22911": "RSA/DSA/EC/OpenSSH Private Keys ($0$)",
     "22921": "RSA/DSA/EC/OpenSSH Private Keys ($6$)",
     "22931": "RSA/DSA/EC/OpenSSH Private Keys ($1, $3$)",
@@ -166,6 +167,7 @@ validalgs = {
     "26100": "Mozilla key4.db",
     "26600": "MetaMask Wallet",
     "26610": "MetaMask Wallet (short hash, plaintext check)",
+    "27700": "MultiBit Classic .wallet (scrypt)",
     "28200": "Exodus Desktop Wallet (scrypt)",
     "28800": "Kerberos 5, etype 17, DB",
     "28900": "Kerberos 5, etype 18, DB"
