@@ -23,7 +23,7 @@ def get_jobs(sortby = 'createdAt', algid = None, reverse = True, currency = None
 	if self == True:
 		url = "https://hashes.com/en/api/jobs_self"
 	else:
-		url = "https://hashes.com/en/api/jobs"
+		url = "https://hashes.com/en/api/jobs?key=%s" % (apikey)
 	json1 = requests.get(url).json()
 	if json1["success"] == True:
 		json1 = json1['list']
@@ -590,7 +590,7 @@ try:
 				limit = None
 			if jobs:
 				table = PrettyTable()
-				table.field_names = ["Created", "ID", "Algorithm", "Total", "Found", "Left", "Max", "Currency", "Price Per Hash"]
+				table.field_names = ["Created", "ID", "Algorithm", "Total", "Found", "Left", "Max", "Currency", "Price Per Hash", "Hints"]
 				table.align = "l"
 				for rows in jobs[0:limit] if limit else jobs:
 					ids = rows['id']
@@ -602,7 +602,12 @@ try:
 					maxcracks = rows['maxCracksNeeded']
 					currency = rows['currency']
 					price = rows['pricePerHash'] + " / $" + rows['pricePerHashUsd']
-					table.add_row([created, ids, algorithm, total, found, left, maxcracks, currency, price])
+					hints = rows['hints']
+					if hints != "":
+						hints = "Hints available"
+					else:
+						hints = "No hints available"
+					table.add_row([created, ids, algorithm, total, found, left, maxcracks, currency, price, hints])
 				print(table)
 			else:
 				print ("No jobs found.")
@@ -641,6 +646,7 @@ try:
 			table.add_row(["login", "Login to hashes.com or view login history.", "-email, -rememberme, -history*, --help"])
 			table.add_row(["upload", "Upload cracks to hashes.com **", "-algid, -file, --help"])
 			table.add_row(["history", "Show history of submitted cracks **", "-limit, -r, -stats, --help"])
+			table.add_row(["hints", "Display any available hints for a specified job ID **", "-jobid, --help"])
 			table.add_row(["withdraw", "Withdraw funds from hashes.com to BTC address *", "No flags"])
 			table.add_row(["withdrawals", "Show all withdrawal requests **", "No flags"])
 			table.add_row(["balance", "Show BTC balance **", "No flags"])
@@ -845,6 +851,27 @@ try:
 					None
 			else:
 				print("API key is required for this action.")
+		if cmd[0:5] == "hints":
+			args = cmd[5:]
+			parser = argparse.ArgumentParser(description='Get hints for job ID.', prog='hints')
+			parser.add_argument("-jobid", help="Job ID to get hints for.", required=True)
+			try:
+				parsed = parser.parse_args(shlex.split(args))
+				data = []
+				for j in get_jobs():
+					if str(j["id"]) == parsed.jobid:
+						data.append(j)
+				if len(data) == 0:
+					print("%s is an invalid job id." % (parsed.jobid))
+				else:
+					for hints in data:
+						if hints['hints'] != "":
+							print("Hints for job id %s:" % (parsed.jobid))
+							print(hints['hints'])
+						else:
+							print("No available hints for job id %s." % (parsed.jobid))
+			except SystemExit:
+				None
 		if cmd[0:7] == "balance":
 			if apikey is not None:
 				get_escrow_balance()
