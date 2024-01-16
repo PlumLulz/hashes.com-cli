@@ -325,21 +325,21 @@ def withdraw():
 def withdraw_requests():
 	get = requests.get("https://hashes.com/en/api/withdrawals?key=%s" % (apikey)).json()
 	table = PrettyTable()
-	table.field_names = ["ID", "Created", "Status", "Currency", "Amount", "Final", "USD", "Transaction Hash"]
+	table.field_names = ["ID", "Created", "Status", "Currency", "Amount", "Final", "USD", "Destination Address", "Transaction Hash"]
 	table.align = "l"
 
 	if get['success'] == True:
 		for row in get['list']:
 			wid = row['id']
 			date = row['date']
-			#address = row['']
 			status = row['status']
 			amount = "{0:.7f}".format(float(row['amount']))
 			final = "{0:.7f}".format(float(row['afterFee']))
 			thash = row['transaction']
 			currency = row['currency']
+			destination = row['destination']
 			usd = to_usd(final, currency)['converted']
-			table.add_row([wid, date, status, currency, amount, final, usd, thash])
+			table.add_row([wid, date, status, currency, amount, final, usd, destination, thash])
 	print(table)
 
 # Watch status of job
