@@ -602,11 +602,14 @@ try:
 					maxcracks = rows['maxCracksNeeded']
 					currency = rows['currency']
 					price = rows['pricePerHash'] + " / $" + rows['pricePerHashUsd']
-					hints = rows['hints']
-					if hints != "":
-						hints = "Hints available"
-					else:
-						hints = "No hints available"
+					try:
+						hints = rows['hints']
+						if hints != "":
+							hints = "Hints available"
+						else:
+							hints = "No hints available"
+					except KeyError:
+						hints = "Disabled"
 					table.add_row([created, ids, algorithm, total, found, left, maxcracks, currency, price, hints])
 				print(table)
 			else:
@@ -865,11 +868,14 @@ try:
 					print("%s is an invalid job id." % (parsed.jobid))
 				else:
 					for hints in data:
-						if hints['hints'] != "":
-							print("Hints for job id %s:" % (parsed.jobid))
-							print(hints['hints'])
-						else:
-							print("No available hints for job id %s." % (parsed.jobid))
+						try:
+							if hints['hints'] != "":
+								print("Hints for job id %s:" % (parsed.jobid))
+								print(hints['hints'])
+							else:
+								print("No available hints for job id %s." % (parsed.jobid))
+						except KeyError:
+							print("Hints are disabled for your usergroup.")
 			except SystemExit:
 				None
 		if cmd[0:7] == "balance":
