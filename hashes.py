@@ -290,37 +290,6 @@ def upload(algid, file):
 	else:
 		print("Failed to upload file!")
 
-# Withdraw funds from hashes.com to BTC address.
-def withdraw():
-	url = "https://hashes.com/en/billing/withdraw"
-	get = session.get(url).text
-	bs = bs4.BeautifulSoup(get, features="html.parser")
-	csrf = bs.find('input', {'name': 'csrf_token'})['value']
-	maxamount = re.sub("[^0-9^.]", "", bs.find('div', {'class': 'col'}).text.strip("\n"))
-	fee = "0.0003"
-	btcaddr = input("Bitcoin Address: ")
-	amount = input("Bitcoin Amount(Max: %s / $%s): " % (maxamount, btc_to_usd(maxamount)["converted"]))
-	conversion = btc_to_usd(amount)
-	if confirm("Are you sure you want to withdraw %s / $%s to %s? There will be a %s fee." % (amount, conversion["converted"], btcaddr, fee)):
-		data = {"csrf_token": csrf, "address": btcaddr, "amount": amount, "submitted": "true"}
-		post = session.post(url, data=data).text
-		bs2 = bs4.BeautifulSoup(post, features="html.parser")
-		error = bs2.find('p', attrs={'class':'mb-0'})
-		error2 = bs2.find("div", {"class": "my-center alert alert-dismissible alert-danger"})
-		success = bs2.find("div", {"class": "my-center alert alert-dismissible alert-success"})
-		if error is not None:
-			print(error.text.strip())
-		elif error2 is not None:
-			text = error2.text.replace("Alert", "").replace("×", "")
-			print(text.strip())
-		elif success is not None:
-			text = success.text.replace("Alert", "").replace("×", "")
-			print(text.strip())
-		else:
-			print("Something happened during withdraw request.")
-	else:
-		print("You have canceled your withdraw request.")
-
 # Shows all withdraw requests
 def withdraw_requests():
 	get = requests.get("https://hashes.com/en/api/withdrawals?key=%s" % (apikey)).json()
@@ -650,7 +619,6 @@ try:
 			table.add_row(["upload", "Upload cracks to hashes.com **", "-algid, -file, --help"])
 			table.add_row(["history", "Show history of submitted cracks **", "-limit, -r, -stats, --help"])
 			table.add_row(["hints", "Display any available hints for a specified job ID **", "-jobid, --help"])
-			table.add_row(["withdraw", "Withdraw funds from hashes.com to BTC address *", "No flags"])
 			table.add_row(["withdrawals", "Show all withdrawal requests **", "No flags"])
 			table.add_row(["balance", "Show BTC balance **", "No flags"])
 			table.add_row(["logout", "Clear logged in session *", "No flags"])
@@ -883,11 +851,6 @@ try:
 				get_escrow_balance()
 			else:
 				print("API key is required for this action.")
-		if cmd == "withdraw":
-			if session is not None:
-				withdraw()
-			else:
-				print("You are not logged in. Type 'help' for info.")
 		if cmd == "withdrawals":
 			if apikey is not None:
 				withdraw_requests()
