@@ -6,9 +6,12 @@ import time
 import json
 import shlex
 import pickle
+import asyncio
 import requests
 import readline
 import argparse
+import importlib
+import websockets
 from getpass import getpass
 from datetime import datetime
 from binascii import a2b_base64
@@ -458,6 +461,42 @@ def confirm(message):
         return False
 
 
+# Websocket async functions
+
+# Websocket listener
+async def wslistener(websocket, hookcode):
+    while True:
+        message = await websocket.recv()
+        message = json.loads(message)
+        if message['success'] == False:
+            print(message['message'])
+        elif message['success'] == True:
+            hookcode.process_message(message)
+
+async def main(hook):
+    # Import hook code
+    try:
+        hookcode = importlib.import_module(hook.rstrip(".py"))
+    except ModuleNotFoundError:
+        print("Hook code failed to import.")
+        return None
+
+    # Start websocket loop
+    url =  "wss://hashes.com/en/api/jobs_wss/?key=%s" % (apikey)
+    async for ws in websockets.connect(url):
+        try:
+            print("Connected to hashes.com websocket API...")
+            print("Use Ctrl + C to disconnect from websocket.\n")
+            await wslistener(ws, hookcode)
+        except websockets.exceptions.ConnectionClosedError:
+            print("\nConnection closed. Reconnecting...")
+            time.sleep(5)
+            continue
+        except websockets.exceptions.ConnectionClosedOK:
+            break
+
+
+
 ## Initial checks and header
 
 
@@ -619,6 +658,7 @@ try:
 			table.add_row(["upload", "Upload cracks to hashes.com **", "-algid, -file, --help"])
 			table.add_row(["history", "Show history of submitted cracks **", "-limit, -r, -stats, --help"])
 			table.add_row(["hints", "Display any available hints for a specified job ID **", "-jobid, --help"])
+			table.add_row(["websocket", "Connect to hashes.com websocket API using a hook file **", "-hook, --help"])
 			table.add_row(["withdrawals", "Show all withdrawal requests **", "No flags"])
 			table.add_row(["balance", "Show BTC balance **", "No flags"])
 			table.add_row(["logout", "Clear logged in session *", "No flags"])
@@ -844,6 +884,18 @@ try:
 								print("No available hints for job id %s." % (parsed.jobid))
 						except KeyError:
 							print("Hints are disabled for your usergroup.")
+			except SystemExit:
+				None
+		if cmd[0:9] == "websocket":
+			args = cmd[9:]
+			parser = argparse.ArgumentParser(description='Connect to hashes.com Websocket API.', prog='websocket')
+			parser.add_argument("-hook", help="Name of hook file. (Must be stored in same dir)", required=True)
+			try:
+				parsed = parser.parse_args(shlex.split(args))
+				try:
+					asyncio.run(main(parsed.hook))
+				except KeyboardInterrupt:
+					print("\nDisconnected from hashes.com Websocket API.")
 			except SystemExit:
 				None
 		if cmd[0:7] == "balance":
