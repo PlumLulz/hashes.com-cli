@@ -489,11 +489,13 @@ async def main(hook):
             print("Use Ctrl + C to disconnect from websocket.\n")
             await wslistener(ws, hookcode)
         except websockets.exceptions.ConnectionClosedError:
-            print("\nConnection closed. Reconnecting...")
-            time.sleep(5)
-            continue
+        	# Redundant close request to avoid 3 connection limit error
+        	await ws.close()
+        	print("\nConnection closed. Reconnecting...")
+        	time.sleep(5)
+        	continue
         except websockets.exceptions.ConnectionClosedOK:
-            break
+        	break
 
 
 
