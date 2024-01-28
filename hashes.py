@@ -801,15 +801,20 @@ try:
 					if sys.platform == 'win32':
 						os.system("color")
 
-					print ("Watching job IDs: %s\n" % (parsed.jobid))
+					print ("Watching job IDs: %s" % (parsed.jobid))
+					print ("Use Ctrl + C to end watch session.\n")
 					prev = None
-					while True:
-						count = watch(parsed.jobid, stime, parsed.length, prev)
-						if count == False:
-							break
-						time.sleep(10)
-						prev = count
-						print("\033[%sF\033[J" % (count), end="")
+					try:
+						while True:
+							count = watch(parsed.jobid, stime, parsed.length, prev)
+							if count == False:
+								break
+							time.sleep(10)
+							prev = count
+							print("\033[%sF\033[J" % (count), end="")
+					except KeyboardInterrupt:
+						print("\n")
+						continue
 				except SystemExit:
 					None
 		if cmd[0:2] == "id":
