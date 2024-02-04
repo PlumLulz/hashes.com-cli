@@ -8,7 +8,6 @@ import shlex
 import pickle
 import asyncio
 import requests
-import readline
 import argparse
 import importlib
 import websockets
@@ -18,6 +17,11 @@ from binascii import a2b_base64
 from prettytable import PrettyTable
 from inc.algorithms import validalgs
 from inc.header import header
+
+if sys.platform == 'win32':
+	import pyreadline3
+else:
+	import readline
 
 # Functions
 
