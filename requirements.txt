@@ -1,5 +1,6 @@
 bs4
 prettytable
 requests
-pyreadline; sys_platform=="win32"
+websockets
+pyreadline3; sys_platform=="win32"
 readline; sys_platform=="linux"
