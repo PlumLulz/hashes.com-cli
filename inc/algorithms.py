@@ -51,6 +51,7 @@ validalgs = {
     "3000": "LM",
     "3200": "bcrypt $2*$, Blowfish (Unix)",
     "4110": "md5($salt.md5($plaintext.$salt))",
+    "4400": "md5(sha1($plaintext))",
     "5100": "Half MD5",
     "5600": "NetNTLMv2",
     "6100": "Whirlpool",
