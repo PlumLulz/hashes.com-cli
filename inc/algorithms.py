@@ -53,6 +53,7 @@ validalgs = {
     "4110": "md5($salt.md5($plaintext.$salt))",
     "4400": "md5(sha1($plaintext))",
     "5100": "Half MD5",
+    "5200": "Password Safe v3 pwsafe3",
     "5600": "NetNTLMv2",
     "6100": "Whirlpool",
     "6600": "1Password, agilekeychain",
