@@ -356,21 +356,24 @@ def watch(jobid, start, length, prev):
 
 # Check and update valid algorithm list
 def update_algs():
-	url = "https://hashes.com/en/algorithms/json"
+	url = "https://hashes.com/en/api/algorithms"
 	json2 = requests.get(url).json()
-	if len(json2) > len(validalgs):
-		temp = {}
-		for alg in json2:
-			temp[str(alg['id'])] = alg['algorithmName']
-		new = set(temp) - set(validalgs)
+	if json2['success'] == True:
+		if len(json2['list']) > len(validalgs):
+			temp = {}
+			for alg in json2['list']:
+				temp[str(alg['id'])] = alg['algorithmName']
+			new = set(temp) - set(validalgs)
 
-		with open("./inc/algorithms.py", "w+") as test:
-			test.write("validalgs = " + str(json.dumps(temp, indent=4)))
-			print("\nNew algorithms added to list:")
-			for nalg in new:
-				print("%s: %s" % (nalg, temp[nalg]))
-		print("\nIn order for update to be applied the script must be reloaded.")
-		exit()
+			with open("./inc/algorithms.py", "w+") as test:
+				test.write("validalgs = " + str(json.dumps(temp, indent=4)))
+				print("\nNew algorithms added to list:")
+				for nalg in new:
+					print("%s: %s" % (nalg, temp[nalg]))
+			print("\nIn order for update to be applied the script must be reloaded.")
+			exit()
+	else:
+		print("Failed to get algorithm list to check for updates.")
 
 # Hash ID
 def hashid(hashh, extended):
