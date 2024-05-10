@@ -339,10 +339,10 @@ def watch(jobid, start, length, prev):
             jobid.remove(str(j["id"]))
     if data:
     	table = PrettyTable()
-    	table.field_names = ["ID", "Hashes Cracked"]
+    	table.field_names = ["ID", "Hashes Cracked", "Hashes Left"]
     	table.align = "l"
     	for row in data:
-    		table.add_row([row['id'], row['foundHashes']])
+    		table.add_row([row['id'], row['foundHashes'], row['leftHashes']])
     	print(table)
     	if len(jobid) > 0:
     		count += 1
