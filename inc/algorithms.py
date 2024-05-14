@@ -162,6 +162,7 @@ validalgs = {
     "23700": "RAR3-p (Uncompressed)",
     "23800": "RAR3-p (Compressed)",
     "23900": "BestCrypt v3 Volume Encryption",
+    "24300": "sha1($salt.sha1($plaintext.$salt))",
     "24410": "PKCS#8 Private Keys (PBKDF2-HMAC-SHA1 + 3DES/AES)",
     "24420": "PKCS#8 Private Keys (PBKDF2-HMAC-SHA256 + 3DES/AES)",
     "24500": "Telegram Desktop >= v2.1.14 (PBKDF2-HMAC-SHA512)",
