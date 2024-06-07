@@ -1,936 +1,1298 @@
-import os
-import re
-import sys
-import bs4
-import time
-import json
-import shlex
-import pickle
-import asyncio
-import requests
 import argparse
+import asyncio
 import importlib
-import websockets
-from getpass import getpass
-from datetime import datetime
+import json
+import os
+import shlex
+import sys
+import time
 from binascii import a2b_base64
+from getpass import getpass
+
+import bs4
+import requests
+import websockets
 from prettytable import PrettyTable
+
 from inc.algorithms import validalgs
-from inc.header import header
-
-if sys.platform == 'win32':
-	import pyreadline3
-else:
-	import readline
-
-# Functions
-
-# Returns json of current jobs in escrow
-def get_jobs(sortby = 'createdAt', algid = None, reverse = True, currency = None, self = False):
-	if self == True:
-		url = "https://hashes.com/en/api/jobs_self"
-	else:
-		url = "https://hashes.com/en/api/jobs?key=%s" % (apikey)
-	json1 = requests.get(url).json()
-	if json1["success"] == True:
-		json1 = json1['list']
-		if currency is not None:
-			json3 = []
-			for rows in json1:
-				if str(rows['currency']) in currency.upper().split(","):
-					json3.append(rows)
-			json1 = json3
-		if algid is not None:
-			json2 = []
-			for rows in json1:
-				if str(rows['algorithmId']) in algid:
-					json2.append(rows)
-			json1 = json2
-		json1 = sorted(json1, key=lambda x : x[sortby], reverse=reverse)
-		return json1
-
-# Downloads or prints jobs in escrow
-def download(jobid, algid, file, printr, currency):
-	urls = []
-	jobs = get_jobs(currency = currency)
-	if jobid is not None:
-		if "," in str(jobid):
-			jobid = jobid.split(",")
-		else:
-			jobid = [jobid]
-		for rows in jobs:
-			if str(rows['id']) in jobid:
-				urls.append(rows['leftList'])
-				jobid.remove(str(rows['id']))
-		if jobid:
-			print (",".join(jobid) + " not valid jobs")
-	elif algid is not None:
-		for rows in jobs:
-			if str(rows['algorithmId']) == algid:
-				urls.append(rows['leftList'])
-		if not urls:
-			print ("No jobs for " + validalgs[algid])
-	else:
-		if currency is not None:
-			for rows in jobs:
-				urls.append(rows['leftList'])
-	if urls:
-		if printr:
-			for url in urls:
-				req = requests.get("http://hashes.com"+url).text.rstrip()
-				print(req)
-		if file:
-			try:
-				with open(file, "ab+") as outfile:
-					for url in urls:
-						req = requests.get("http://hashes.com"+url, stream=True, headers={'Accept-Encoding': None})
-						total_size = int(req.headers.get('Content-Length'))
-						downloaded = 0
-						if total_size < 1048576:
-							suffix = "KB"
-							factor = float(1<<10)
-						else:
-							suffix = "MB"
-							factor = float(1<<20)
-						for chunk in req.iter_content(1024):
-							outfile.write(chunk)
-							downloaded += len(chunk)
-							end = int(50 * downloaded / total_size)
-							print("\r[%s%s]%s %s/%s %s   " % ('=' * end, ' ' * (50-end), "{0:.2f}".format(downloaded / factor), suffix, "{0:.2f}".format(total_size / factor), suffix), flush=True, end='')
-					print ("\nWrote hashes to: "+file)
-			except OSError as e:
-				print(e)
-
-# Gets stats about hashes that are left in escrow
-def get_stats(json):
-	stats = {}
-	btc,xmr,ltc = 0,0,0
-	for rows in json:
-		algid = rows['algorithmId']
-		currency = rows['currency']
-		neededleft = float(rows['maxCracksNeeded']) - float(rows['foundHashes']) if rows['foundHashes'] > 0 else rows['maxCracksNeeded']
-		if algid in stats:
-			found = stats[algid]['totalFound'] + rows['foundHashes']
-			left = stats[algid]['totalLeft'] + rows['leftHashes']
-			usd = float(stats[algid]['totalUSD']) + float(rows['pricePerHashUsd']) * neededleft
-			if currency == "BTC":
-				btc = float(stats[algid]['totalBTC']) + float(rows['pricePerHash']) * neededleft
-				xmr = float(stats[algid]['totalXMR'])
-				ltc = float(stats[algid]['totalLTC'])
-			elif currency == "XMR":
-				xmr = float(stats[algid]['totalXMR']) + float(rows['pricePerHash']) * neededleft
-				btc = float(stats[algid]['totalBTC'])
-				ltc = float(stats[algid]['totalLTC'])
-			elif currency == "LTC":
-				ltc = float(stats[algid]['totalLTC']) + float(rows['pricePerHash']) * neededleft
-				xmr = float(stats[algid]['totalXMR'])
-				btc = float(stats[algid]['totalBTC'])
-		else:
-			found = rows['foundHashes']
-			left = rows['leftHashes']
-			usd = float(rows['pricePerHashUsd']) * neededleft
-			if currency == "BTC":
-				btc = float(rows['pricePerHash']) * neededleft
-				xmr = 0
-				ltc = 0
-			elif currency == "XMR":
-				xmr = float(rows['pricePerHash']) * neededleft
-				btc = 0
-				ltc = 0
-			elif currency == "LTC":
-				ltc = float(rows['pricePerHash']) * neededleft
-				btc = 0
-				xmr = 0
-		stats[algid] = {"totalFound": found, "totalLeft": left, "totalUSD": "{0:.3f}".format(float(usd)), "totalBTC": "{0:.7f}".format(float(btc)), "totalXMR": "{0:.7f}".format(float(xmr)), "totalLTC": "{0:.7f}".format(float(ltc))}
-	table = PrettyTable()
-	table.field_names = ["ID", "Algorithm", "Left", "Found", "USD", "BTC", "XMR", "LTC"]
-	table.align = "l"
-	escrowleft,escrowfound,escrowusdvalue,escrowbtcvalue,escrowxmrvalue,escrowltcvalue = 0,0,0,0,0,0
-	for aid in stats:
-		escrowleft += stats[aid]['totalLeft']
-		escrowfound += stats[aid]['totalFound']
-		escrowusdvalue += float(stats[aid]['totalUSD'])
-		escrowbtcvalue += float(stats[aid]['totalBTC'])
-		escrowxmrvalue += float(stats[aid]['totalXMR'])
-		escrowltcvalue += float(stats[aid]['totalLTC'])
-		table.add_row([aid, validalgs[str(aid)], stats[aid]['totalLeft'], stats[aid]['totalFound'], "$"+stats[aid]['totalUSD'], stats[aid]['totalBTC'], stats[aid]['totalXMR'], stats[aid]['totalLTC']])
-	print(table)
-	print("Total hashes left: "+str(escrowleft))
-	print("Total hashes found: "+str(escrowfound))
-	print("Total USD value: $"+"{0:.3f}".format(escrowusdvalue))
-	print("Total BTC value: %s / %s" % ("{0:.7f}".format(escrowbtcvalue), to_usd("{0:.7f}".format(escrowbtcvalue), "BTC")['converted'] if escrowbtcvalue > 0 else "$0.00"))
-	print("Total XMR value: %s / %s" % ("{0:.7f}".format(escrowxmrvalue), to_usd("{0:.7f}".format(escrowxmrvalue), "XMR")['converted'] if escrowxmrvalue > 0 else "$0.00"))
-	print("Total LTC value: %s / %s" % ("{0:.7f}".format(escrowltcvalue), to_usd("{0:.7f}".format(escrowltcvalue), "LTC")['converted'] if escrowltcvalue > 0 else "$0.00"))
-
-# Converts data URI to binary and saves to jpeg
-def save_captcha(uri):
-	base64 = uri.split(",", 1)[1]
-	binary = a2b_base64(base64)
-	with open("captcha.jpg", "wb+") as img:
-		img.write(binary)
-	print("Downloaded captcha image to 'captcha.jpg'")
-
-# Creates requests session for actions that require you to be logged into hashes.com
-def login(email, password, rememberme):
-	global session
-	session = requests.Session()
-	url = "https://hashes.com/en/login"
-	get = session.get(url).text
-	bs = bs4.BeautifulSoup(get, features="html.parser")
-	csrf = bs.find('input', {'name': 'csrf_token'})['value']
-	captchaid = bs.find('input', {'name': 'captchaIdentifier'})['value']
-	uri = bs.find("img", {"class": "img-fluid"}).get('src')
-	save_captcha(uri)
-	print("Please open the captcha image saved to the current directory and enter it below.")
-	captcha = input("Captcha Code: ")
-	data = {"email": email, "password": password, "csrf_token": csrf, "captcha": captcha, "captchaIdentifier": captchaid, "ddos": "fi", "submitted": "1"}
-	post = session.post(url, data=data).text
-	bs2 = bs4.BeautifulSoup(post, features="html.parser")
-	error = bs2.find("div", {"class": "my-center alert alert-dismissible alert-danger"})
-	error2 = bs2.find('p', attrs={'class':'mb-0'})
-	if error is not None:
-		print("".join([t for t in error.contents if type(t)==bs4.element.NavigableString]).strip())
-		session = None
-	elif error2 is not None:
-		print(error2.text.strip())
-		session = None
-	else:
-		print("Login successful.")
-		os.remove("captcha.jpg") 
-		if rememberme:
-			with open("session.txt", "wb+") as sessionfile:
-				pickle.dump(session.cookies, sessionfile)
-			print("Wrote session data to: session.txt")
-
-# Gets paid recovery history from escrow
-def get_escrow_history(reverse, limit, stats):
-	uploadurl = "https://hashes.com/en/api/uploads?key=%s" % (apikey)
-	get = requests.get(uploadurl).json()
-
-	if get['success'] == True:
-		data = []
-		for row in get['list']:
-			cid = row['id']
-			date = row['date']
-			alg = row['algorithm']
-			status = row['status']
-			total = row['totalHashes']
-			finds = row['validHashes']
-			btc = row['btc']
-			xmr = row['xmr']
-			ltc = row['ltc']
-			data.append([str(cid), str(date), str(alg), str(status), str(total), str(finds), str(btc), str(xmr), str(ltc)])
-		if stats:
-			totalsub,totalvalid,totalearnedusd,totalearnedbtc,totalearnedxmr,totalearnedltc = 0,0,0,0,0,0
-			algorithms = {}
-			for row in data:
-				usd = 0
-				btc = row[6]
-				xmr = row[7]
-				ltc = row[8]
-				totalsub += int(row[4])
-				totalvalid += int(row[5])
-				totalearnedusd += float(usd)
-				totalearnedbtc += float(btc)
-				totalearnedxmr += float(xmr)
-				totalearnedltc += float(ltc)
-				if row[2] not in algorithms:
-					algorithms[row[2]] = [row[4], row[5], btc, xmr, ltc]
-				else:
-					algorithms[row[2]] = [int(algorithms[row[2]][0]) + int(row[4]), int(algorithms[row[2]][1]) + int(row[5]), float(algorithms[row[2]][2]) + float(btc), float(algorithms[row[2]][3]) + float(xmr), float(algorithms[row[2]][4]) + float(ltc)]
-			table = PrettyTable()
-			table.field_names = ["Algorithm", "Hashes Submitted", "Valid Hashes Submitted", "BTC", "XMR", "LTC"]
-			table.align = "l"
-			for k,v in algorithms.items():
-				table.add_row([k, v[0], v[1], "{0:.7f}".format(float(v[2])), "{0:.7f}".format(float(v[3])), "{0:.7f}".format(float(v[4]))])
-			table.sortby = "BTC"
-			table.reversesort = True
-			print("USD prices are based on BTCs current price.")
-			print(table)
-			print("Total hashes submitted: %s" % (totalsub))
-			print("Total valid hashes submitted: %s" % (totalvalid))
-			print("Total BTC value: %s / %s" % ("{0:.7f}".format(totalearnedbtc), to_usd("{0:.7f}".format(totalearnedbtc), "BTC")['converted'] if totalearnedbtc > 0 else "$0.00"))
-			print("Total XMR value: %s / %s" % ("{0:.7f}".format(totalearnedxmr), to_usd("{0:.7f}".format(totalearnedxmr), "XMR")['converted'] if totalearnedxmr > 0 else "$0.00"))
-			print("Total LTC value: %s / %s" % ("{0:.7f}".format(totalearnedltc), to_usd("{0:.7f}".format(totalearnedltc), "LTC")['converted'] if totalearnedltc > 0 else "$0.00"))
-
-		else:
-			table = PrettyTable()
-			table.field_names = ["ID", "Created", "Algorithm", "Status", "Total Hashes", "Valid Finds", "BTC", "XMR", "LTC"]
-			table.align = "l"
-			for row in data:
-				table.add_row(row)
-			if reverse:
-				table = table[::-1]
-			if limit:
-				table = table[0:limit]
-			print(table)
-
-# Gets current balance in escrow
-def get_escrow_balance(p = True):
-	get = requests.get("https://hashes.com/en/api/balance?key=%s" % (apikey)).json()
-	if get['success'] == True:
-		if p == True:
-			table = PrettyTable()
-			table.field_names = ["Currency", "Amount", "USD"]
-			table.align = "l"
-			get.pop('success')
-			for currency,value in get.items():
-				if float(value) > 0:
-					usd  = to_usd(value, currency)["converted"]
-				else:
-					usd = "$0.00"
-				table.add_row([currency, value, usd])
-			print(table)
-		elif p == False:
-			return get
+from tools import show
 
 
-# Upload found hashes to hashes.com
-def upload(algid, file):
-	uploadurl =  "https://hashes.com/en/api/founds"
-	data = {"key": apikey, "algo": algid}
-	file = {"userfile": open(file, "rb")}
-	post = requests.post(uploadurl, files=file, data=data).json()
-	if post["success"] == True:
-		print("File successfully uploaded.")
-		print("Use the 'history' command to check the status.")
-	else:
-		print("Failed to upload file!")
+def get_jobs(
+        apikey_: str,
+        sortby: str = "createdAt",
+        algid: set | None = None,
+        reverse: bool = True,
+        currency: str | None = None,
+        self_: bool = False
+) -> list:
+    url = "https://hashes.com/en/api/jobs" + ("_self" if self_ else f"?key={apikey_}")
+    json_data_ = requests.get(url).json()
 
-# Shows all withdraw requests
-def withdraw_requests():
-	get = requests.get("https://hashes.com/en/api/withdrawals?key=%s" % (apikey)).json()
-	table = PrettyTable()
-	table.field_names = ["ID", "Created", "Status", "Currency", "Amount", "Final", "USD", "Destination Address", "Transaction Hash"]
-	table.align = "l"
+    if json_data_["success"]:
+        result = json_data_["list"]
 
-	if get['success'] == True:
-		for row in get['list']:
-			wid = row['id']
-			date = row['date']
-			status = row['status']
-			amount = "{0:.7f}".format(float(row['amount']))
-			final = "{0:.7f}".format(float(row['afterFee']))
-			thash = row['transaction']
-			currency = row['currency']
-			destination = row['destination']
-			usd = to_usd(final, currency)['converted']
-			table.add_row([wid, date, status, currency, amount, final, usd, destination, thash])
-	print(table)
+        if currency is not None:
+            data_ = []
 
-# Watch status of job
-def watch(jobid, start, length, prev):
-    data = []
-    bid =[]
+            for data_row in result:
+                if str(data_row["currency"]) in currency.upper().split(","):
+                    data_.append(data_row)
+
+            result = data_
+        elif algid is not None:
+            data_ = []
+            for data_row in result:
+                if str(data_row['algorithmId']) in algid:
+                    data_.append(data_row)
+            result = data_
+
+        return sorted(result, key=lambda x: x[sortby], reverse=reverse)
+
+
+def download(
+        apikey_: str,
+        jobid: str,
+        algid: int,
+        file: str,
+        currency: str,
+        printr: bool | None = None,
+) -> None:
+    urls = []
+    jobs_ = get_jobs(apikey_, currency=currency)
+    if jobid is not None:
+        jobids_ = "".join(
+            jobid.split()
+        ).split(",")
+
+        s_ = set(jobids_)
+
+        for rows in jobs_:
+            if str(rows['id']) in s_:
+                urls.append(rows['leftList'])
+                s_.remove(str(rows['id']))
+
+        if s_:
+            print(f"{','.join(s_)} not valid jobs")
+    elif algid is not None:
+        for rows in jobs_:
+            if str(rows['algorithmId']) == algid:
+                urls.append(rows['leftList'])
+
+        if not urls:
+            print(f"No jobs for {validalgs[algid]}")
+    else:
+        if currency is not None:
+            for rows in jobs_:
+                urls.append(rows['leftList'])
+    if urls:
+        if printr:
+            for url in urls:
+                req = requests.get(f"http://hashes.com{url}").text.rstrip()
+                print(req)
+        if file:
+            try:
+                with open(file, "ab+") as outfile:
+                    for url in urls:
+                        req = requests.get(f"http://hashes.com{url}", stream=True, headers={'Accept-Encoding': None})
+                        total_size = int(req.headers.get('Content-Length'))
+                        downloaded_ = 0
+
+                        if total_size < 1048576:
+                            suffix = "KB"
+                            factor = float(1 << 10)
+                        else:
+                            suffix = "MB"
+                            factor = float(1 << 20)
+
+                        for chunk in req.iter_content(1024):
+                            outfile.write(chunk)
+
+                            downloaded_ += len(chunk)
+                            end = int(50 * downloaded_ / total_size)
+
+                            print(f"\r[{'=' * end}{' ' * (50-end)}]{round((downloaded_ / factor), 2)} {suffix}/"
+                                  f"{round((total_size / factor), 2)} {suffix}   ", flush=True, end='')
+                        time.sleep(2)
+                    print("\nWrote hashes to: "+file)
+            except OSError as e:
+                print(e)
+
+
+def get_stats(
+        json_data_: list
+) -> None:
+    stats = {}
+    btc, xmr, ltc = 0, 0, 0
+    for rows in json_data_:
+        algid = rows['algorithmId']
+        currency = rows['currency']
+        neededleft = float(rows['maxCracksNeeded']) - float(rows['foundHashes']) \
+            if rows['foundHashes'] > 0 else rows['maxCracksNeeded']
+        if algid in stats:
+            found = stats[algid]['totalFound'] + rows['foundHashes']
+            left = stats[algid]['totalLeft'] + rows['leftHashes']
+            usd = float(stats[algid]['totalUSD']) + float(rows['pricePerHashUsd']) * neededleft
+            if currency == "BTC":
+                btc = float(stats[algid]['totalBTC']) + float(rows['pricePerHash']) * neededleft
+                xmr = float(stats[algid]['totalXMR'])
+                ltc = float(stats[algid]['totalLTC'])
+            elif currency == "XMR":
+                xmr = float(stats[algid]['totalXMR']) + float(rows['pricePerHash']) * neededleft
+                btc = float(stats[algid]['totalBTC'])
+                ltc = float(stats[algid]['totalLTC'])
+            elif currency == "LTC":
+                ltc = float(stats[algid]['totalLTC']) + float(rows['pricePerHash']) * neededleft
+                xmr = float(stats[algid]['totalXMR'])
+                btc = float(stats[algid]['totalBTC'])
+        else:
+            found = rows['foundHashes']
+            left = rows['leftHashes']
+            usd = float(rows['pricePerHashUsd']) * neededleft
+            if currency == "BTC":
+                btc = float(rows['pricePerHash']) * neededleft
+                xmr = 0
+                ltc = 0
+            elif currency == "XMR":
+                xmr = float(rows['pricePerHash']) * neededleft
+                btc = 0
+                ltc = 0
+            elif currency == "LTC":
+                ltc = float(rows['pricePerHash']) * neededleft
+                btc = 0
+                xmr = 0
+        stats[algid] = {
+            "totalFound": found,
+            "totalLeft": left,
+            "totalUSD": round(float(usd), 3),
+            "totalBTC": round(float(btc), 7),
+            "totalXMR": round(float(xmr), 7),
+            "totalLTC": round(float(ltc), 7)
+        }
+    table_ = PrettyTable()
+    table_.field_names = ["ID", "Algorithm", "Left", "Found", "USD", "BTC", "XMR", "LTC"]
+    table_.align = "l"
+    escrowleft, escrowfound, escrowusdvalue, escrowbtcvalue, escrowxmrvalue, escrowltcvalue = 0, 0, 0, 0, 0, 0
+    for aid_ in stats:
+        escrowleft += stats[aid_]['totalLeft']
+        escrowfound += stats[aid_]['totalFound']
+        escrowusdvalue += float(stats[aid_]['totalUSD'])
+        escrowbtcvalue += float(stats[aid_]['totalBTC'])
+        escrowxmrvalue += float(stats[aid_]['totalXMR'])
+        escrowltcvalue += float(stats[aid_]['totalLTC'])
+        table_.add_row([aid_, validalgs[str(aid_)], stats[aid_]['totalLeft'],
+                        stats[aid_]['totalFound'], "$" + str(stats[aid_]['totalUSD']),
+                        stats[aid_]['totalBTC'], stats[aid_]['totalXMR'], stats[aid_]['totalLTC']])
+    print(table_)
+    print(f"Total hashes left: {escrowleft}")
+    print(f"Total hashes found: {escrowfound}")
+    print(f"Total USD value: ${round(escrowusdvalue, 3)}")
+    print(f"Total BTC value: {round(escrowbtcvalue, 7)} / "
+          f"{to_usd(round(escrowbtcvalue, 7), 'BTC')['converted'] if escrowbtcvalue > 0 else '$0.00'}")
+    print(f"Total XMR value: {round(escrowxmrvalue, 7)} / "
+          f"{to_usd(round(escrowxmrvalue, 7), 'XMR')['converted'] if escrowxmrvalue > 0 else '$0.00'}")
+    print(f"Total LTC value: {round(escrowltcvalue, 7)} / "
+          f"{to_usd(round(escrowltcvalue, 7), 'LTC')['converted'] if escrowltcvalue > 0 else '$0.00'}")
+
+
+def recent_logins(
+        limit_: int | None = None
+):
+    url = "https://hashes.com/en/profile"
+
+    req = session.get(url).text
+    bs = bs4.BeautifulSoup(req, features="html.parser")
+
+    loginhistory = bs.find("table", {"class": "table table-hover table-striped"})
+    loginhistory.find("thead", {"class": "fw-bolder"}).decompose()
+
+    table_ = PrettyTable()
+    table_.field_names = ["Created", "Status", "IP Addres", "Location"]
+    table_.align = "l"
+    for row in loginhistory.findAll("tr")[0:limit_]:
+        cells = row.findAll("td")
+
+        if cells:
+            date = cells[0].find(string=True)
+            status = cells[1].find("span").text
+            ipaddress = cells[2].find(string=True)
+            location = cells[3].find(string=True)
+            table_.add_row([str(date), str(status), str(ipaddress), str(location)])
+    print(table_)
+
+
+def save_captcha(
+        uri: str
+) -> int:
+    base64 = uri.split(",", 1)[1]
+    binary = a2b_base64(base64)
+    captcha_time = int(time.time())
+
+    with open(f"captcha_{captcha_time}.jpg", "wb+") as img:
+        img.write(binary)
+
+    print(f"Downloaded captcha image to 'captcha_{captcha_time}.jpg'")
+
+    return captcha_time
+
+
+def login(
+        email_: str,
+        password_: str,
+        rememberme_: bool | None = None
+) -> requests.Session | None:
+    url = "https://hashes.com/en/login"
+    session_ = requests.Session()
+
+    html = session_.get(url).text
+    bs = bs4.BeautifulSoup(html, features="html.parser")
+
+    csrf = bs.find('input', {'name': 'csrf_token'})['value']
+    captcha_id = bs.find('input', {'name': 'captchaIdentifier'})['value']
+    captcha_uri = bs.find("img", {"class": "img-fluid"}).get('src')
+    captcha_time = save_captcha(captcha_uri)
+
+    print("Please open the captcha image saved to the current directory and enter it below.")
+
+    captcha = input("Captcha Code: ")
+    auth_data = {
+        "email": email_,
+        "password": password_,
+        "csrf_token": csrf,
+        "captcha": captcha,
+        "captchaIdentifier": captcha_id,
+        "ddos": "fi",
+        "submitted": "1"
+    }
+
+    html = session_.post(url, data=auth_data).text
+    bs = bs4.BeautifulSoup(html, features="html.parser")
+
+    error1 = bs.find("div", {"class": "my-center alert alert-dismissible alert-danger"})
+    error2 = bs.find('p', attrs={'class': 'mb-0'})
+
+    if error1 is not None:
+        error = []
+        for t in error1.contents:
+            if type(t) is bs4.element.NavigableString:
+                error.append(t.text)
+
+        print("".join(error).strip())
+        os.remove(f"captcha_{captcha_time}.jpg")
+    elif error2 is not None:
+        print(error2.text.strip())
+        os.remove(f"captcha_{captcha_time}.jpg")
+    else:
+        print("Login successful.")
+        os.remove(f"captcha_{captcha_time}.jpg")
+        if rememberme_:
+            with open("session.txt", "w", encoding="utf-8") as sessionfile_:
+                sessionfile_.write(json.dumps(session_.cookies))
+            print("Wrote session data to: session.txt")
+        return session_
+
+    return
+
+
+def upload(
+        apikey_: str,
+        algid: int,
+        file: str
+) -> None:
+    uploadurl = "https://hashes.com/en/api/founds"
+
+    data_ = {"key": apikey_, "algo": algid}
+    data_file = {"userfile": open(file, "rb")}
+
+    req = requests.post(uploadurl, files=data_file, data=data_).json()
+
+    if req["success"]:
+        print("File successfully uploaded.")
+        print("Use the 'history' command to check the status.")
+    else:
+        print("Failed to upload file!")
+
+    return
+
+
+def to_usd(
+        value: float | int | str,
+        currency: str
+) -> dict:
+    convert = {'BTC': 'XXBTZUSD', 'XMR': 'XXMRZUSD', 'LTC': 'XLTCZUSD'}
+
+    if currency != 'credits':
+        url = f'https://api.kraken.com/0/public/Ticker?pair={currency}usd'
+        resp = requests.get(url).json()
+
+        currentprice = resp['result'][convert[currency.upper()]]['a'][0]
+        price = float(value) * float(currentprice)
+        converted = f'${round(price, 3)}'
+
+        return {'currentprice': currentprice, 'converted': converted}
+
+    return {'currentprice': None, 'converted': 'N/A'}
+
+
+def get_escrow_history(
+        apikey_: str,
+        reverse_: bool,
+        limit_: int | None,
+        stats_: bool | None
+) -> None:
+    uploadurl = f"https://hashes.com/en/api/uploads?key={apikey_}"
+    data_json = requests.get(uploadurl).json()
+
+    if data_json['success'] is True:
+        data_list = []
+
+        for row in data_json['list']:
+            cid = row['id']
+            date = row['date']
+            alg = row['algorithm']
+            status = row['status']
+            total = row['totalHashes']
+            finds = row['validHashes']
+            btc = row['btc']
+            xmr = row['xmr']
+            ltc = row['ltc']
+            data_list.append(
+                [
+                    str(cid), str(date), str(alg),
+                    str(status), str(total), str(finds),
+                    str(btc), str(xmr), str(ltc)
+                ])
+
+        if stats_:
+            totalsub, totalvalid, totalearnedusd, totalearnedbtc, totalearnedxmr, totalearnedltc = 0, 0, 0, 0, 0, 0
+            algorithms = {}
+            for row in data_list:
+                usd = 0
+                btc = row[6]
+                xmr = row[7]
+                ltc = row[8]
+                totalsub += int(row[4])
+                totalvalid += int(row[5])
+                totalearnedusd += float(usd)
+                totalearnedbtc += float(btc)
+                totalearnedxmr += float(xmr)
+                totalearnedltc += float(ltc)
+                if row[2] not in algorithms:
+                    algorithms[row[2]] = [row[4], row[5], btc, xmr, ltc]
+                else:
+                    algorithms[row[2]] = [int(algorithms[row[2]][0]) + int(row[4]),
+                                          int(algorithms[row[2]][1]) + int(row[5]),
+                                          float(algorithms[row[2]][2]) + float(btc),
+                                          float(algorithms[row[2]][3]) + float(xmr),
+                                          float(algorithms[row[2]][4]) + float(ltc)]
+            table_ = PrettyTable()
+            table_.field_names = ["Algorithm", "Hashes Submitted", "Valid Hashes Submitted", "BTC", "XMR", "LTC"]
+            table_.align = "l"
+            for k, v in algorithms.items():
+                table_.add_row([k, v[0], v[1], round(float(v[2]), 7), round(float(v[3]), 7),
+                                "{0:.7f}".format(float(v[4]))])
+            table_.sortby = "BTC"
+            table_.reversesort = True
+            print("USD prices are based on BTCs current price.")
+            print(table_)
+            print(f"Total hashes submitted: {totalsub}")
+            print(f"Total valid hashes submitted: {totalvalid}")
+            print(f"Total BTC value: {round(totalearnedbtc, 7)} / "
+                  f"{to_usd(round(totalearnedbtc, 7), 'BTC')['converted'] if totalearnedbtc > 0 else '$0.00'}")
+            print(
+                f"Total XMR value: {round(totalearnedxmr, 7)} / "
+                f"{to_usd(round(totalearnedxmr, 7), 'XMR')['converted'] if totalearnedxmr > 0 else '$0.00'}")
+            print(
+                f"Total LTC value: {round(totalearnedltc, 7)} / "
+                f"{to_usd(round(totalearnedltc, 7), 'LTC')['converted'] if totalearnedltc > 0 else '$0.00'}")
+
+        else:
+            table_ = PrettyTable()
+            table_.field_names = ["ID", "Created", "Algorithm", "Status",
+                                  "Total Hashes", "Valid Finds", "BTC",
+                                  "XMR", "LTC"]
+            table_.align = "l"
+            for row in data_list:
+                table_.add_row(row)
+            if reverse_:
+                table_ = table_[::-1]
+            if limit_:
+                table_ = table_[0:limit]
+
+            print(table_)
+
+    return
+
+
+def watch(
+        apikey_: str,
+        jobid: str,
+        start: float,
+        length: int,
+        prev_: str | None
+) -> int | None:
+    data_list = []
     # This is used to count how many lines are going to be displayed
     # Starts at 4 to account for the 3 line header and 1 line bottom
-    count = 4
-    jobid = jobid.split(",")
+    count_ = 4
     elapsed = time.time() - start
-    
-    if elapsed >=  60 * length:
-    	print("\033[2F\033[J", end="")
-    	print("Watch completed on job IDs: %s\n" % (",".join(jobid)), end="")
-    	return False
-    for j in get_jobs():
-        if str(j["id"]) in jobid:
-            data.append(j)
-            count += 1
-            jobid.remove(str(j["id"]))
-    if data:
-    	table = PrettyTable()
-    	table.field_names = ["ID", "Hashes Cracked", "Hashes Left"]
-    	table.align = "l"
-    	for row in data:
-    		table.add_row([row['id'], row['foundHashes'], row['leftHashes']])
-    	print(table)
-    	if len(jobid) > 0:
-    		count += 1
-    		print("Job IDs %s are no longer valid." % (",".join(jobid)))
-    	return count
+    jobids_ = "".join(
+        jobid.split()
+    ).split(",")
+
+    s_ = set(jobids_)
+
+    if elapsed >= 60 * length:
+        print("\033[2F\033[J", end="")
+        print(f"Watch completed on job IDs: {','.join(s_)}\n", end="")
+        return None
+
+    for q in get_jobs(apikey_):
+        if str(q["id"]) in s_:
+            data_list.append(q)
+            count_ += 1
+            s_.remove(str(q["id"]))
+
+    if data_list:
+        table_ = PrettyTable()
+        table_.field_names = ["ID", "Hashes Cracked", "Hashes Left"]
+        table_.align = "l"
+
+        for row in data_list:
+            table_.add_row([row['id'], row['foundHashes'], row['leftHashes']])
+
+        print(table_)
+
+        if len(s_) > 0:
+            count_ += 1
+            print(f"Job IDs {','.join(s_)} are no longer valid.")
+
+        return count_
     else:
-    	if prev != None:
-    		print("\033[2F\033[J", end="")
-    	print("Job IDs %s are no longer valid." % (",".join(jobid)))
-    	return False
+        if prev_ is not None:
+            print("\033[2F\033[J", end="")
 
-# Check and update valid algorithm list
-def update_algs():
-	url = "https://hashes.com/en/api/algorithms"
-	json2 = requests.get(url).json()
-	if json2['success'] == True:
-		if len(json2['list']) > len(validalgs):
-			temp = {}
-			for alg in json2['list']:
-				temp[str(alg['id'])] = alg['algorithmName']
-			new = set(temp) - set(validalgs)
+        print(f"Job IDs {','.join(s_)} are no longer valid.")
 
-			with open("./inc/algorithms.py", "w+") as test:
-				test.write("validalgs = " + str(json.dumps(temp, indent=4)))
-				print("\nNew algorithms added to list:")
-				for nalg in new:
-					print("%s: %s" % (nalg, temp[nalg]))
-			print("\nIn order for update to be applied the script must be reloaded.")
-			exit()
-	else:
-		print("Failed to get algorithm list to check for updates.")
-
-# Hash ID
-def hashid(hashh, extended):
-	url = "https://hashes.com/en/api/identifier?hash=%s&extended=%s" % (hashh, str(extended).lower())
-	get = requests.get(url).json()
-	if get['success'] == True:
-		for algs in get['algorithms']:
-			print(algs)
-	elif get['success'] == False:
-		print(get['message'])
-
-# Hash lookup
-def hash_lookup(hashes, outfile, printr, verbose):
-	url = "https://hashes.com/en/api/search"
-	data = {"key": apikey, "hashes[]": hashes}
-	post = requests.post(url, data=data).json()
-	if post['success'] == True:
-		cost = post['cost']
-		hcount = post['count']
-		founds = post['founds']
-		print("There were %s/%s hashes found." % (len(founds), hcount))
-		print("Potential cost: %s" % (len(hashes) + 1))
-		print("Actual cost: %s\n\n" % (cost))
-		if len(founds) > 0:
-			for found in founds:
-				hashh = found['hash']
-				salt = found['salt']
-				plain = found['plaintext']
-				alg = found['algorithm']
-				if len(salt) == 0:
-					line = "%s:%s" % (hashh, plain)
-				else:
-					line = "%s:%s:%s" % (hashh, salt, plain)
-				if verbose == True:
-					line += ":"+alg
-				if printr == True:
-					print(line)
-				elif outfile is not None:
-					with open(outfile, "a+") as ofile:
-						ofile.write(line+"\n")
-			if outfile is not None:
-				print("Wrote search results to '%s'" % (outfile))
-		else:
-			print("No hashes found.")
-	elif post['success'] == False:
-		print(post['message'])
+        return None
 
 
-# Converts crypto to USD values
-def to_usd(value, currency):
-	if currency != "credits":
-		url = "https://api.kraken.com/0/public/Ticker?pair=%susd" % (currency)
-		resp = requests.get(url).json()
-		#currentprice = resp['USD']
-		if currency.upper() == "BTC":
-			currentprice = resp['result']['XXBTZUSD']['a'][0]
-		elif currency.upper() == "XMR":
-			currentprice = resp['result']['XXMRZUSD']['a'][0]
-		elif currency.upper() == "LTC":
-			currentprice = resp['result']['XLTCZUSD']['a'][0]
-		converted = "${0:.3f}".format(float(value) * float(currentprice))
-		return {"currentprice": currentprice, "converted": converted}
-	else:
-		return {"currentprice": None, "converted": "N/A"}
+def hashid(
+        hashh,
+        extended
+) -> None:
+    url = f"https://hashes.com/en/api/identifier?hash={hashh}&extended={str(extended).lower()}"
+    req = requests.get(url).json()
 
-# Get recent logins
-def recent_logins(limit = None):
-	url = "https://hashes.com/en/profile"
-	get = session.get(url).text
-	bs = bs4.BeautifulSoup(get, features="html.parser")
-	loginhistory = bs.find("table", { "class" : "table table-hover table-striped" })
-	loginhistory.find("thead", { "class": "fw-bolder"}).decompose()
-	table = PrettyTable()
-	table.field_names = ["Created", "Status", "IP Addres", "Location"]
-	table.align = "l"
-	for row in loginhistory.findAll("tr")[0:limit]:
-		cells = row.findAll("td")
-		if cells != []:
-			date = cells[0].find(string=True)
-			status = cells[1].find("span").text
-			ipaddress = cells[2].find(string=True)
-			location = cells[3].find(string=True)
-			table.add_row([str(date), str(status), str(ipaddress), str(location)])
-	print(table)
+    if req['success'] is True:
+        for algs in req['algorithms']:
+            print(algs)
+    elif req['success'] is False:
+        print(req['message'])
 
-# Confirm function
-def confirm(message):
-    c = input(message+" [y/n] ")
+    return
+
+
+def get_escrow_balance(
+        apikey_: str,
+        p: bool = True
+) -> dict | None:
+    req = requests.get(f"https://hashes.com/en/api/balance?key={apikey_}").json()
+
+    print(req)
+
+    if req['success'] is True:
+        if p is True:
+            table_ = PrettyTable()
+            table_.field_names = ["Currency", "Amount", "USD"]
+            table_.align = "l"
+
+            req.pop('success')
+
+            for currency, value in req.items():
+                if float(value) > 0:
+                    usd = to_usd(value, currency)["converted"]
+                else:
+                    usd = "$0.00"
+                table_.add_row([currency, value, usd])
+
+            print(table_)
+        elif p is False:
+            return req
+
+
+def confirm(
+        message: str
+) -> bool:
+    c = input(message + " [y/n] ")
+
     if c == "y":
         return True
     if c == "n":
         return False
 
+    return False
 
-# Websocket async functions
 
-# Websocket listener
-async def wslistener(websocket, hookcode):
+def hash_lookup(
+        apikey_: str,
+        hashes_: list,
+        outfile: str | None,
+        printr: bool | None,
+        verbose: bool | None
+) -> None:
+    url = "https://hashes.com/en/api/search"
+    data_ = {"key": apikey_, "hashes[]": hashes_}
+
+    req = requests.post(url, data=data_).json()
+
+    if req['success'] is True:
+        cost = req['cost']
+        hcount = req['count']
+        founds = req['founds']
+
+        print(f"There were {len(founds)}/{hcount} hashes found.")
+        print(f"Potential cost: {len(hashes_) + 1}")
+        print(f"Actual cost: {cost}\n\n")
+
+        if len(founds) > 0:
+            for found in founds:
+                hashh = found['hash']
+                salt = found['salt']
+                plain = found['plaintext']
+                alg = found['algorithm']
+
+                if len(salt) == 0:
+                    line = f"{hashh}:{plain}"
+                else:
+                    line = f"{hashh}:{salt}:{plain}"
+
+                if verbose is True:
+                    line += ":" + alg
+
+                if printr is True:
+                    print(line)
+
+                elif outfile is not None:
+                    with open(outfile, "a+") as ofile:
+                        ofile.write(line + "\n")
+            if outfile is not None:
+                print(f"Wrote search results to '{outfile}'")
+        else:
+            print("No hashes found.")
+    elif req['success'] is False:
+        print(req['message'])
+
+    return
+
+
+async def wslistener(
+        websocket,
+        hookcode
+) -> None:
     while True:
         message = await websocket.recv()
+
         message = json.loads(message)
-        if message['success'] == False:
+
+        if message['success'] is False:
             print(message['message'])
-        elif message['success'] == True:
+
+        elif message['success'] is True:
             hookcode.process_message(message)
 
-async def main(hook):
+
+async def main(
+        apikey_: str,
+        hook: str
+) -> None:
     # Import hook code
     try:
         hookcode = importlib.import_module(hook.rstrip(".py"))
     except ModuleNotFoundError:
         print("Hook code failed to import.")
-        return None
+        return
 
     # Start websocket loop
-    url =  "wss://hashes.com/en/api/jobs_wss/?key=%s" % (apikey)
+    url = f"wss://hashes.com/en/api/jobs_wss/?key={apikey_}"
     async for ws in websockets.connect(url):
         try:
             print("Connected to hashes.com websocket API...")
             print("Use Ctrl + C to disconnect from websocket.\n")
             await wslistener(ws, hookcode)
         except websockets.exceptions.ConnectionClosedError:
-        	# Redundant close request to avoid 3 connection limit error
-        	await ws.close()
-        	print("\nConnection closed. Reconnecting...")
-        	time.sleep(5)
-        	continue
+            # Redundant close request to avoid 3 connection limit error
+            await ws.close()
+            print("\nConnection closed. Reconnecting...")
+            time.sleep(5)
+            continue
         except websockets.exceptions.ConnectionClosedOK:
-        	break
+            break
 
 
+def withdraw_requests(
+        apikey_: str
+) -> None:
+    req = requests.get(f"https://hashes.com/en/api/withdrawals?key={apikey_}").json()
+    table_ = PrettyTable()
+    table_.field_names = [
+        "ID", "Created",
+        "Status", "Currency",
+        "Amount", "Final",
+        "USD", "Destination Address",
+        "Transaction Hash"
+    ]
+    table_.align = "l"
 
-## Initial checks and header
+    if req['success'] is True:
+        for row in req['list']:
+            wid = row['id']
+            date = row['date']
+            status = row['status']
+            amount = round(float(row['amount']), 7)
+            final = round(float(row['afterFee']), 7)
+            thash = row['transaction']
+            currency = row['currency']
+            destination = row['destination']
+            usd = to_usd(final, currency)['converted']
+            table.add_row([wid, date, status, currency, amount, final, usd, destination, thash])
+    print(table_)
 
 
-# Print header at start of script
-print(header)
+def update_algs() -> None:
+    url = "https://hashes.com/en/api/algorithms"
+    req_json = requests.get(url).json()
 
-# Check if there is an exisiting session saved
+    if req_json['success'] is True:
+        if len(req_json['list']) > len(validalgs):
+            temp_ = {}
+
+            for alg in req_json['list']:
+                temp_[str(alg['id'])] = alg['algorithmName']
+
+            new = set(temp_) - set(validalgs)
+
+            with open("inc/algorithms.py", "w+") as test:
+                test.write("validalgs = " + str(json.dumps(temp_, indent=4)))
+
+                print("\nNew algorithms added to list:")
+
+                for nalg in new:
+                    print(f"{nalg}: {temp_[nalg]}")
+
+            print("\nIn order for update to be applied the script must be reloaded.")
+            exit()
+    else:
+        print("Failed to get algorithm list to check for updates.")
+
+
 if os.path.exists("session.txt"):
-	if confirm("Load saved session?"):
-		session = requests.session()
-		with open("session.txt", "rb") as sessionfile:
-			session.cookies.update(pickle.load(sessionfile))
-		print("Loaded existing session from session.txt")
-	else:
-		session = None
+    if confirm("Load saved session?"):
+        session = requests.session()
+
+        with open("session.txt", "rb") as sessionfile:
+            json_data = json.loads(sessionfile.read())
+            session.cookies.update(json_data)
+
+        print("Loaded existing session from session.txt")
+    else:
+        session = None
 else:
-	session = None
+    session = None
 
 # Check if api key exists
 if os.path.exists("api.txt"):
-	with open("api.txt", "r") as apifile:
-		apikey = apifile.read()
-	print("Loaded API key from api.txt")
+    with open("api.txt", "r") as apifile:
+        apikey = apifile.read().replace(" ", "")
+    print("Loaded API key from api.txt")
 else:
-	apikey = input("Enter API Key: ")
-	with open("api.txt", "w+") as apifile:
-		apifile.write(apikey)
+    apikey = input("Enter API Key: ")
+    with open("api.txt", "w+") as apifile:
+        apifile.write(apikey.replace(" ", ""))
 
 # Check if valid algorithm list is updated
 update_algs()
 
 # If logged in display last 3 attempted logins
 if session is not None:
-	print("\nLast 3 login attempts:")
-	recent_logins(3)
+    print("\nLast 3 login attempts:")
+    recent_logins(3)
 
-## Start command line
+
+# Start command line
+
 try:
-	while True:
-		cmd = input("hashes.com:~$ ")
+    while True:
+        cmd = input("hashes.com:~$ ")
 
-		if cmd[0:8] == "get jobs":
-			if len(cmd) > 8:
-				args = cmd[8:]
-				validsort = {"price": "pricePerHash", "total": "totalHashes", "left": "leftHashes", "found": "foundHashes", "lastcrack": "lastUpdate", "created": "createdAt"}
-				parser = argparse.ArgumentParser(description='Get escrow jobs from hashes.com', prog='get jobs')
-				parser.add_argument("-sortby", help='Parameter to sort jobs by.', default='created', choices=validsort)
-				parser.add_argument("-r", help='Reverse display order.', action='store_false')
-				parser.add_argument("-limit", help='Rows to limit results by.', default=None, type=int)
-				parser.add_argument("-currency", help='Currenct to filter jobs by. Multiple can be given e.g. BTC,LTC', default=None)
-				g = parser.add_mutually_exclusive_group()
-				g.add_argument("-algid", help='Algorithm to filter jobs by. Multiple can be given e.g. 20,300,220', default=None)
-				g.add_argument("-jobid", help='Job ID to filter jobs by. Multiple can be given e.g. 1,2,3,4,5', default=None)
-				g.add_argument("-self", help='Search jobs you have created.', action='store_true')
-				try:
-					parsed = parser.parse_args(shlex.split(args))
-					if parsed.algid is not None:
-						if "," in parsed.algid:
-							s = set(parsed.algid.split(","))
-							d = s.difference(validalgs)
-							s.intersection_update(validalgs)
-							if s is not None:
-								if len(d) > 0:
-									print (",".join(d)+" are not valid algorithm IDs.")
-								jobs = get_jobs(validsort[parsed.sortby], s, parsed.r, parsed.currency)
-							else:
-								jobs = False
-								print (",".join(d)+ " are not valid algorithm IDs.")
-						else:
-							if parsed.algid not in validalgs:
-								jobs = False
-								print (parsed.algid+" not a valid algorithm ID.")
-							else:
-						 		jobs = get_jobs(validsort[parsed.sortby], [parsed.algid], parsed.r, parsed.currency)
-					elif parsed.jobid is not None:
-						if "," in parsed.jobid:
-							jids = parsed.jobid.split(",")
-						else:
-							jids = [parsed.jobid]
-						jobs = get_jobs(validsort[parsed.sortby], None, parsed.r, parsed.currency)
-						temp = []
-						for j in jobs:
-							if str(j["id"]) in jids:
-								temp.append(j)
-								jids.remove(str(j["id"]))
-						jobs = temp
-						if jids:
-							print("No valid jobs for ids: " + ",".join(jids))
-					elif parsed.self == True:
-						jobs = get_jobs(validsort[parsed.sortby], None, parsed.r, parsed.currency, parsed.self)
-					else:
-						jobs = get_jobs(validsort[parsed.sortby], None, parsed.r, parsed.currency)
-					limit = parsed.limit
-				except SystemExit:
-					jobs = False
-					None
-			else:
-				jobs = get_jobs()
-				limit = None
-			if jobs:
-				table = PrettyTable()
-				table.field_names = ["Created", "ID", "Algorithm", "Total", "Found", "Left", "Max", "Currency", "Price Per Hash", "Hints"]
-				table.align = "l"
-				for rows in jobs[0:limit] if limit else jobs:
-					ids = rows['id']
-					created = datetime.strptime(rows['createdAt'], '%Y-%m-%d %H:%M:%S').strftime("%m/%d/%y")
-					algorithm = rows['algorithmName']
-					total = rows['totalHashes']
-					found = rows['foundHashes']
-					left = rows['leftHashes']
-					maxcracks = rows['maxCracksNeeded']
-					currency = rows['currency']
-					price = rows['pricePerHash'] + " / $" + rows['pricePerHashUsd']
-					try:
-						hints = rows['hints']
-						if hints != "":
-							hints = "Hints available"
-						else:
-							hints = "No hints available"
-					except KeyError:
-						hints = "Disabled"
-					table.add_row([created, ids, algorithm, total, found, left, maxcracks, currency, price, hints])
-				print(table)
-			else:
-				print ("No jobs found.")
-		if cmd[0:8] == "download":
-			args = cmd[8:]
-			parser = argparse.ArgumentParser(description='Download escrow jobs from hashes.com', prog='download')
-			parser.add_argument("-currency", help='Crytocurrency to filter downloads by. Multiple can be given e.g. BTC,LTC', default=None)
-			g1 = parser.add_mutually_exclusive_group()
-			g1.add_argument("-jobid", help='Job ID to download. Multiple IDs can be seperated with a comma. e.g. 3,4,5.', default=None)
-			g1.add_argument("-algid", help='Algorithm ID to download', default=None)
-			g2 = parser.add_mutually_exclusive_group(required=True)
-			g2.add_argument("-f", help='Download to file.')
-			g2.add_argument("-p", help='Print to screen', action='store_true')
-			try:
-				parsed = parser.parse_args(shlex.split(args))
-				if parsed.algid is not None:
-					if parsed.algid not in validalgs:	
-						print(parsed.algid+" is not a valid algorithm.")
-					else:
-						download(parsed.jobid, parsed.algid, parsed.f, parsed.p, parsed.currency)
-				else:
-					download(parsed.jobid, parsed.algid, parsed.f, parsed.p, parsed.currency)
-			except SystemExit:
-				None
-		if cmd[0:4] == "help":
-			table = PrettyTable()
-			table.field_names = ["Command", "Description", "Flags"]
-			table.align = "l"
-			table.add_row(["get jobs", "Get current jobs in escrow", "-algid, -jobid, -currency, -sortby, -r, -limit, --help"])
-			table.add_row(["download", "Download to file or print jobs from escrow", "-jobid, -algid, -currency, -f, -p, --help"])
-			table.add_row(["stats", "Get stats about hashes left in escrow", "-algid, --help"])
-			table.add_row(["watch", "Watch status of jobs (updates every 10 seconds)", "-jobid, -length, --help"])
-			table.add_row(["algs", "Get the algorithms hashes.com currently supports", "-algid, -search, --help"])
-			table.add_row(["lookup", "Hash lookup **", "-single, -infile, -outfile, -p, -verbose, --help"])
-			table.add_row(["id", "Hash identifier", "-hash, -extended, --help"])
-			table.add_row(["login", "Login to hashes.com or view login history.", "-email, -rememberme, -history*, --help"])
-			table.add_row(["upload", "Upload cracks to hashes.com **", "-algid, -file, --help"])
-			table.add_row(["history", "Show history of submitted cracks **", "-limit, -r, -stats, --help"])
-			table.add_row(["hints", "Display any available hints for a specified job ID **", "-jobid, --help"])
-			table.add_row(["websocket", "Connect to hashes.com websocket API using a hook file **", "-hook, --help"])
-			table.add_row(["withdrawals", "Show all withdrawal requests **", "No flags"])
-			table.add_row(["balance", "Show BTC balance **", "No flags"])
-			table.add_row(["logout", "Clear logged in session *", "No flags"])
-			table.add_row(["clear", "Clear console", "No flags"])
-			table.add_row(["exit", "Exit console", "No flags"])
-			print(table)
-			print("* = Must be logged in")
-			print("** = Only requires apikey")
-		if cmd[0:5] == "stats":
-			args = cmd[5:]
-			parser = argparse.ArgumentParser(description='Get stats for hashes left in escrow from hashes.com', prog='stats')
-			parser.add_argument("-algid", help='Algorithm ID to sort stats by. Multiple can be given e.g. 20,300,220', default=None)
-			try:
-				parsed = parser.parse_args(shlex.split(args))
-				if parsed.algid is not None:
-					if "," in parsed.algid:
-						s = set(parsed.algid.split(","))
-						d = s.difference(validalgs)
-						s.intersection_update(validalgs)
-						if s is not None:
-							if len(d) > 0:
-								print (",".join(d)+" are not valid algorithm IDs.")
-							get_stats(get_jobs("createdAt", s))
-						else:
-							print (",".join(d)+ " are not valid algorithm IDs.")
-					else:
-						if parsed.algid not in validalgs:
-							print(parsed.algid+" is not a vlaid algorithm.")
-						else:
-							get_stats(get_jobs("createdAt", [parsed.algid]))
-				else:
-					get_stats(get_jobs())
-			except SystemExit:
-				None
-		if cmd[0:4] == "algs":
-			args = cmd[4:]
-			parser = argparse.ArgumentParser(description='List of all algorithms that hashes.com supports', prog='algs')
-			parser.add_argument("-algid", help='Algorithm ID to lookup. Multiple can be given e.g. 20,300,220', default=None)
-			parser.add_argument("-search", help='Search algorithm by name.', default=None)
+        if cmd[0:8] == "get jobs":
+            if len(cmd) > 8:
+                args = cmd[8:]
+                validsort = {"price": "pricePerHash", "total": "totalHashes", "left": "leftHashes",
+                             "found": "foundHashes", "lastcrack": "lastUpdate", "created": "createdAt"}
 
-			try:
-				parsed = parser.parse_args(shlex.split(args))
-				if parsed.algid:
-					ids = parsed.algid.split(",")
-				table = PrettyTable()
-				table.field_names = ["ID", "Algorithm"]
-				table.align = "l"
+                parser = argparse.ArgumentParser(
+                    description='Get escrow jobs from hashes.com',
+                    prog='get jobs'
+                )
+                parser.add_argument(
+                    "-sortby",
+                    help='Parameter to sort jobs by.',
+                    default='created',
+                    choices=validsort
+                )
+                parser.add_argument(
+                    "-r",
+                    help='Reverse display order.',
+                    action='store_false'
+                )
+                parser.add_argument(
+                    "-limit",
+                    help='Rows to limit results by.',
+                    default=None,
+                    type=int
+                )
+                parser.add_argument(
+                    "-currency",
+                    help='Current to filter jobs by. Multiple can be given e.g. BTC,LTC',
+                    default=None
+                )
 
-				for aid, name in validalgs.items():
-					if parsed.algid:
-						if aid in ids:
-							table.add_row([aid, name])
-							ids.remove(aid)
-					elif parsed.search:
-						if parsed.search.upper() in name.upper():
-							table.add_row([aid, name])
-					else:
-						table.add_row([aid, name])
+                g = parser.add_mutually_exclusive_group()
+                g.add_argument(
+                    "-algid",
+                    help='Algorithm to filter jobs by. Multiple can be given e.g. 20,300,220',
+                    default=None
+                )
+                g.add_argument(
+                    "-jobid",
+                    help='Job ID to filter jobs by. Multiple can be given e.g. 1,2,3,4,5',
+                    default=None
+                )
+                g.add_argument(
+                    "-self",
+                    help='Search jobs you have created.',
+                    default=False,
+                    action='store_true'
+                )
 
-				if len(table.get_string()) > 75:
-					print(table)
-				else:
-					if parsed.search:
-						print("No results found for '%s'" % (parsed.search))
-				if parsed.algid:
-					if len(ids) > 0:
-						print("%s not currently supported." % (",".join(ids)))
-			except SystemExit:
-				None
-		if cmd[0:5] == "login":
-			args = cmd[5:]
-			parser = argparse.ArgumentParser(description='Login to hashes.com', prog='login')
-			g1 = parser.add_mutually_exclusive_group(required=True)
-			g1.add_argument("-email", help='Email to hashes.com account.', default=None)
-			g1.add_argument("-history", help='Show login history.', action='store_true')
-			parser.add_argument("-rememberme", help='Save session to reload after closing console.', action='store_true')
-			try:
-				parsed = parser.parse_args(shlex.split(args))
-				if parsed.history:
-					if session is not None:
-						recent_logins()
-					else:
-						print("You must be logged in for this action.")
-				elif parsed.email is not None:
-					if session is None:
-						email = parsed.email
-						password = getpass()
-						login(email, password, parsed.rememberme)
-					else:
-						print("You are already logged in!")
-			except SystemExit:
-				None
-		if cmd[0:6] == "upload":
-			if apikey is not None:
-				args = cmd[6:]
-				parser = argparse.ArgumentParser(description='Upload cracked hashes to hashes.com', prog='upload')
-				parser.add_argument("-algid", help='Algorithm ID of cracked hashes', required=True, default=None)
-				parser.add_argument("-file", help='File of cracked hashes', required=True, default=None)
-				try:
-					parsed = parser.parse_args(shlex.split(args))
-					if parsed.algid not in validalgs:
-						print (parsed.algid+" is not a valid algorithm ID")
-					elif os.path.exists(parsed.file) == False:
-						print (parsed.file+" does not exist")
-					elif not parsed.file.lower().endswith(".txt"):
-						print ("File type must be .txt")
-					else:
-						upload(parsed.algid, parsed.file)
-				except SystemExit:
-					None
-			else:
-				print("API key is required for this action.")
-		if cmd[0:7] == "history":
-			if apikey is not None:
-				args = cmd[7:]
-				parser = argparse.ArgumentParser(description='View history of submitted cracks.', prog='history')
-				parser.add_argument("-r", help='Reverse order of history.', required=False, action='store_true')
-				parser.add_argument("-limit", help='Number of rows to limit results.', required=False, type=int)
-				parser.add_argument("-stats", help='See history stats.', required=False, action='store_true')
-				try:
-					parsed = parser.parse_args(shlex.split(args))
-					get_escrow_history(parsed.r, parsed.limit, parsed.stats)
-				except SystemExit:
-					None
-			else:
-				print("API key is required for this action.")
-		if cmd[0:5] == "watch":
-				args = cmd[5:]
-				parser = argparse.ArgumentParser(description='Watch status of job ID.', prog='watch')
-				parser.add_argument("-jobid", help='Job ID to watch. Multiple can be given e.g. 29374,29294,8', required=True)
-				parser.add_argument("-length", help='Length in minutes to watch job.', required=False, default=5, type=int)
-				try:
-					parsed = parser.parse_args(shlex.split(args))
-					stime = time.time()
+                try:
+                    parsed = parser.parse_args(shlex.split(args))
 
-					# In order to use ANSI escape codes on Windows they must be activated first.
-					# The easiest way that I have found is to simply run the color command first
-					if sys.platform == 'win32':
-						os.system("color")
+                    if parsed.algid is not None:
+                        algids = "".join(
+                            parsed.algid.split()
+                        ).split(",")
 
-					print ("Watching job IDs: %s" % (parsed.jobid))
-					print ("Use Ctrl + C to end watch session.\n")
-					prev = None
-					try:
-						while True:
-							count = watch(parsed.jobid, stime, parsed.length, prev)
-							if count == False:
-								break
-							time.sleep(10)
-							prev = count
-							print("\033[%sF\033[J" % (count), end="")
-					except KeyboardInterrupt:
-						print("\n")
-						continue
-				except SystemExit:
-					None
-		if cmd[0:2] == "id":
-			args = cmd[2:]
-			parser = argparse.ArgumentParser(description='List potential hash algorithms for a given hash.', prog='id')
-			parser.add_argument("-hash", help="Hash to identify.", required=True)
-			parser.add_argument("-extended", help="Show extended results.", action='store_true')
-			try:
-				parsed = parser.parse_args(shlex.split(args))
-				print("Possible algorithms for '%s':" % (parsed.hash))
-				hashid(parsed.hash, parsed.extended)
-			except SystemExit:
-				None
-		if cmd[0:6] == "lookup":
-			if apikey is not None:
-				args = cmd[6:]
-				parser = argparse.ArgumentParser(description='Hash lookup', prog='lookup')
-				parser.add_argument("-verbose", help='Display algorithm of hashes that are found.', action='store_true')
-				g1 = parser.add_mutually_exclusive_group()
-				g1.add_argument("-infile", help='Input file with hashes to lookup', default=None)
-				g1.add_argument("-single", help='Sinlge line hash to lookup', default=None)
-				g2 = parser.add_mutually_exclusive_group(required=True)
-				g2.add_argument("-outfile", help='Output lookup results to a file', default=None)
-				g2.add_argument("-p", help='Print lookup results', action='store_true')
-				try:
-					parsed = parser.parse_args(shlex.split(args))
-					hashes = None
-					if parsed.single is not None:
-						hashes = [parsed.single]
-					elif parsed.infile is not None:
-						if os.path.exists(parsed.infile):
-							with open(parsed.infile) as infile:
-								hashes = infile.read().splitlines()
-						else:
-							print("The file '%s' does not exist." % (parsed.infile))
-					if hashes is not None:
-						if len(hashes) <= 250:
-							credits = get_escrow_balance(p = False)['credits']
-							pcost = 1 + len(hashes)
-							if int(credits) > 1:
-								if pcost > int(credits):
-									print("Warning: Depending on search results, you may not have enough credits for this transaction.")
-								if confirm("This transaction has a potential cost of %s credits. You have a balance of %s credits. Continue?" % (pcost, credits)):
-									hash_lookup(hashes, parsed.outfile, parsed.p, parsed.verbose)
-								else:
-									print("Lookup transaction canceled.")
-							else:
-								print("You don't have enough credits to process a lookup. You need at least 2 credits to process a lookup.")
-						else:
-							print("The maximum hashes allowed per request is 250!")
-				except SystemExit:
-					None
-			else:
-				print("API key is required for this action.")
-		if cmd[0:5] == "hints":
-			args = cmd[5:]
-			parser = argparse.ArgumentParser(description='Get hints for job ID.', prog='hints')
-			parser.add_argument("-jobid", help="Job ID to get hints for.", required=True)
-			try:
-				parsed = parser.parse_args(shlex.split(args))
-				data = []
-				for j in get_jobs():
-					if str(j["id"]) == parsed.jobid:
-						data.append(j)
-				if len(data) == 0:
-					print("%s is an invalid job id." % (parsed.jobid))
-				else:
-					for hints in data:
-						try:
-							if hints['hints'] != "":
-								print("Hints for job id %s:" % (parsed.jobid))
-								print(hints['hints'])
-							else:
-								print("No available hints for job id %s." % (parsed.jobid))
-						except KeyError:
-							print("Hints are disabled for your usergroup.")
-			except SystemExit:
-				None
-		if cmd[0:9] == "websocket":
-			args = cmd[9:]
-			parser = argparse.ArgumentParser(description='Connect to hashes.com Websocket API.', prog='websocket')
-			parser.add_argument("-hook", help="Name of hook file. (Must be stored in same dir)", required=True)
-			try:
-				parsed = parser.parse_args(shlex.split(args))
-				try:
-					asyncio.run(main(parsed.hook))
-				except KeyboardInterrupt:
-					print("\nDisconnected from hashes.com Websocket API.")
-			except SystemExit:
-				None
-		if cmd[0:7] == "balance":
-			if apikey is not None:
-				get_escrow_balance()
-			else:
-				print("API key is required for this action.")
-		if cmd == "withdrawals":
-			if apikey is not None:
-				withdraw_requests()
-			else:
-				print("API key is required for this action.")
-		if cmd[0:6] == "logout":
-			if session is not None:
-				session = None
-				print("Logged out.")
-			else:
-				print("You are not logged in.")
-		if cmd[0:5] == "clear":
-			os.system('cls||clear');
-		if cmd[0:4] == "exit":
-			break
+                        s = set(algids)
+                        error_id = []
+                        for id_ in algids:
+                            if id_ not in validalgs:
+                                error_id.append(id_)
+
+                        if len(error_id) != 0:
+                            print(",".join(s) + " are not valid algorithm IDs.")
+                            continue
+
+                        jobs = get_jobs(apikey, validsort[parsed.sortby], s, parsed.r, parsed.currency)
+
+                    elif parsed.jobid is not None:
+                        jobids = "".join(
+                            parsed.jobid.split()
+                        ).split(",")
+
+                        s = set(jobids)
+
+                        jobs = get_jobs(apikey, validsort[parsed.sortby], None, parsed.r, parsed.currency)
+                        temp = []
+
+                        for job in jobs:
+                            if str(job["id"]) in jobids:
+                                temp.append(job)
+                                jobids.remove(str(job["id"]))
+
+                        jobs = temp
+
+                        if jobids:
+                            print("No valid jobs for ids: " + ",".join(jobids))
+                            continue
+                    elif parsed.self:
+                        jobs = get_jobs(apikey, validsort[parsed.sortby], None, parsed.r, parsed.currency, parsed.self)
+                    else:
+                        jobs = get_jobs(apikey, validsort[parsed.sortby], None, parsed.r, parsed.currency)
+                    limit = parsed.limit
+                except SystemExit:
+                    continue
+            else:
+                jobs = get_jobs(apikey)
+                limit = None
+
+            show.show_table_jobs(jobs, limit)
+        elif cmd[0:8] == "download":
+            args = cmd[8:]
+
+            parser = argparse.ArgumentParser(
+                description="Download escrow jobs from hashes.com",
+                prog="download"
+            )
+            parser.add_argument(
+                "-currency",
+                help='Crytocurrency to filter downloads by. Multiple can be given e.g. BTC,LTC',
+                default=None
+            )
+
+            g1 = parser.add_mutually_exclusive_group()
+            g1.add_argument(
+                "-jobid",
+                help='Job ID to download. Multiple IDs can be seperated with a comma. e.g. 3,4,5.',
+                default=None
+            )
+            g1.add_argument(
+                "-algid",
+                help='Algorithm ID to download',
+                default=None
+            )
+
+            g2 = parser.add_mutually_exclusive_group(required=True)
+            g2.add_argument(
+                "-f",
+                help='Download to file.'
+            )
+            g2.add_argument(
+                "-p",
+                help='Print to screen',
+                action='store_true'
+            )
+
+            try:
+                parsed = parser.parse_args(shlex.split(args))
+                downloaded = False
+                if parsed.algid is not None:
+                    if parsed.algid not in validalgs:
+                        print(f"{parsed.algid} is not a valid algorithm.")
+                        continue
+
+                    download(apikey, parsed.jobid, parsed.algid, parsed.f, parsed.currency, parsed.p)
+                    downloaded = True
+
+                if not downloaded:
+                    download(apikey, parsed.jobid, parsed.algid, parsed.f, parsed.currency, parsed.p)
+            except SystemExit:
+                pass
+        elif cmd[0:4] == "help":
+            show.show_table_start()
+        elif cmd[0:5] == "stats":
+            args = cmd[5:]
+            parser = argparse.ArgumentParser(
+                description='Get stats for hashes left in escrow from hashes.com',
+                prog='stats'
+            )
+            parser.add_argument(
+                "-algid",
+                help='Algorithm ID to sort stats by. Multiple can be given e.g. 20,300,220',
+                default=None
+            )
+            try:
+                parsed = parser.parse_args(shlex.split(args))
+
+                if parsed.algid is not None:
+                    algids = "".join(
+                        parsed.algid.split()
+                    ).split(",")
+
+                    s = set(algids)
+                    error_id = []
+                    for id_ in algids:
+                        if id_ not in validalgs:
+                            error_id.append(id_)
+
+                    if len(error_id) != 0:
+                        print(",".join(s) + " are not valid algorithm IDs.")
+                        continue
+
+                    get_stats(get_jobs(apikey, "createdAt", s))
+                    continue
+                get_stats(get_jobs(apikey))
+            except SystemExit:
+                pass
+        elif cmd[0:4] == "algs":
+            args = cmd[4:]
+
+            parser = argparse.ArgumentParser(
+                description='List of all algorithms that hashes.com supports',
+                prog='algs'
+            )
+            parser.add_argument(
+                "-algid",
+                help='Algorithm ID to lookup. Multiple can be given e.g. 20,300,220',
+                default=None
+            )
+            parser.add_argument(
+                "-search",
+                help='Search algorithm by name.',
+                default=None
+            )
+
+            try:
+                parsed = parser.parse_args(shlex.split(args))
+                ids = {}
+
+                if parsed.algid:
+                    algids = "".join(
+                        parsed.algid.split()
+                    ).split(",")
+
+                    ids = set(algids)
+
+                table = PrettyTable()
+                table.field_names = ["ID", "Algorithm"]
+                table.align = "l"
+
+                for aid, name in validalgs.items():
+                    if parsed.algid:
+                        if aid in ids:
+                            table.add_row([aid, name])
+                            ids.remove(aid)
+                    elif parsed.search:
+                        if parsed.search.upper() in name.upper():
+                            table.add_row([aid, name])
+                    else:
+                        table.add_row([aid, name])
+
+                if len(table.get_string()) > 75:
+                    print(table)
+                elif parsed.search:
+                    print(f"No results found for '{parsed.search}'")
+                elif parsed.algid and len(ids) > 0:
+                    print(f"{','.join(ids)} not currently supported.")
+            except SystemExit:
+                pass
+        elif cmd[0:5] == "login":
+            args = cmd[5:]
+
+            parser = argparse.ArgumentParser(
+                description='Login to hashes.com',
+                prog='login'
+            )
+
+            g1 = parser.add_mutually_exclusive_group(
+                required=True
+            )
+            g1.add_argument(
+                "-email",
+                help="Email to hashes.com account.",
+                default=None
+            )
+            parser.add_argument(
+                "-history",
+                help="Show login history.",
+                action="store_true"
+            )
+            parser.add_argument(
+                "-rememberme",
+                help="Save session to reload after closing console.",
+                action="store_true"
+            )
+            try:
+                parsed = parser.parse_args(shlex.split(args))
+                if parsed.history:
+                    if session is not None:
+                        recent_logins()
+                        continue
+                    print("You must be logged in for this action.")
+                elif parsed.email is not None:
+                    if session is None:
+                        email = parsed.email
+                        password = getpass(prompt="Password: ")
+                        session = login(email, password, parsed.rememberme)
+                    else:
+                        print("You are already logged in!")
+                else:
+                    print("Email is None")
+            except SystemExit:
+                pass
+        elif cmd[0:6] == "upload":
+            if apikey is not None:
+                args = cmd[6:]
+
+                parser = argparse.ArgumentParser(
+                    description='Upload cracked hashes to hashes.com',
+                    prog='upload'
+                )
+                parser.add_argument(
+                    "-algid",
+                    help='Algorithm ID of cracked hashes',
+                    required=True,
+                    default=None
+                )
+                parser.add_argument(
+                    "-file",
+                    help='File of cracked hashes',
+                    required=True,
+                    default=None
+                )
+
+                try:
+                    parsed = parser.parse_args(shlex.split(args))
+
+                    if parsed.algid not in validalgs:
+                        print(f"{parsed.algid} is not a valid algorithm ID")
+                    elif os.path.exists(parsed.file) is False:
+                        print(f"{parsed.file} does not exist")
+                    elif not parsed.file.lower().endswith(".txt"):
+                        print("File type must be .txt")
+                    else:
+                        upload(apikey, parsed.algid, parsed.file)
+                except SystemExit:
+                    pass
+            else:
+                print("API key is required for this action.")
+        elif cmd[0:7] == "history":
+            if apikey is not None:
+                args = cmd[7:]
+
+                parser = argparse.ArgumentParser(
+                    description='View history of submitted cracks.',
+                    prog='history'
+                )
+                parser.add_argument(
+                    "-r",
+                    help='Reverse order of history.',
+                    required=False,
+                    action='store_true'
+                )
+                parser.add_argument(
+                    "-limit",
+                    help='Number of rows to limit results.',
+                    required=False,
+                    type=int
+                )
+                parser.add_argument(
+                    "-stats",
+                    help='See history stats.',
+                    required=False,
+                    action='store_true'
+                )
+                try:
+                    parsed = parser.parse_args(shlex.split(args))
+                    get_escrow_history(apikey, parsed.r, parsed.limit, parsed.stats)
+                except SystemExit:
+                    pass
+            else:
+                print("API key is required for this action.")
+        elif cmd[0:5] == "watch":
+            args = cmd[5:]
+
+            parser = argparse.ArgumentParser(
+                description='Watch status of job ID.',
+                prog='watch'
+            )
+            parser.add_argument(
+                "-jobid",
+                help='Job ID to watch. Multiple can be given e.g. 29374,29294,8',
+                required=True
+            )
+            parser.add_argument(
+                "-length",
+                help='Length in minutes to watch job.',
+                required=False,
+                default=5,
+                type=int
+            )
+            try:
+                parsed = parser.parse_args(shlex.split(args))
+                stime = time.time()
+
+                # In order to use ANSI escape codes on Windows they must be activated first.
+                # The easiest way that I have found is to simply run the color command first
+                if sys.platform == 'win32':
+                    os.system("color")
+
+                print(f"Watching job IDs: {parsed.jobid}")
+                print("Use Ctrl + C to end watch session.\n")
+
+                prev = None
+                try:
+                    while True:
+                        count = watch(apikey, parsed.jobid, stime, parsed.length, prev)
+
+                        if count is False:
+                            break
+
+                        time.sleep(10)
+                        prev = count
+                        print(f"\033[{count}F\033[J", end="")
+                except KeyboardInterrupt:
+                    print("\n")
+                    continue
+            except SystemExit:
+                pass
+        elif cmd[0:2] == "id":
+            args = cmd[2:]
+            parser = argparse.ArgumentParser(description='List potential hash algorithms for a given hash.', prog='id')
+            parser.add_argument("-hash", help="Hash to identify.", required=True)
+            parser.add_argument("-extended", help="Show extended results.", action='store_true')
+            try:
+                parsed = parser.parse_args(shlex.split(args))
+                print(f"Possible algorithms for '{parsed.hash}':")
+                hashid(parsed.hash, parsed.extended)
+            except SystemExit:
+                pass
+        elif cmd[0:6] == "lookup":
+            if apikey is not None:
+                args = cmd[6:]
+
+                parser = argparse.ArgumentParser(
+                    description='Hash lookup',
+                    prog='lookup'
+                )
+                parser.add_argument(
+                    "-verbose",
+                    help='Display algorithm of hashes that are found.',
+                    action='store_true'
+                )
+
+                g1 = parser.add_mutually_exclusive_group()
+                g1.add_argument(
+                    "-infile",
+                    help='Input file with hashes to lookup',
+                    default=None
+                )
+                g1.add_argument(
+                    "-single",
+                    help='Sinlge line hash to lookup',
+                    default=None
+                )
+
+                g2 = parser.add_mutually_exclusive_group(required=True)
+                g2.add_argument(
+                    "-outfile",
+                    help='Output lookup results to a file',
+                    default=None
+                )
+                g2.add_argument(
+                    "-p",
+                    help='Print lookup results',
+                    action='store_true'
+                )
+
+                try:
+                    parsed = parser.parse_args(shlex.split(args))
+                    hashes = None
+
+                    if parsed.single is not None:
+                        hashes = [parsed.single]
+                    elif parsed.infile is not None:
+                        if os.path.exists(parsed.infile):
+                            with open(parsed.infile) as infile:
+                                hashes = infile.read().splitlines()
+                        else:
+                            print(f"The file '{parsed.infile}' does not exist.")
+                    if hashes is not None:
+                        if len(hashes) > 250:
+                            print("The maximum hashes allowed per request is 250!")
+                            continue
+
+                        credits_ = get_escrow_balance(apikey, p=False)['credits']
+                        pcost = 1 + len(hashes)
+
+                        if int(credits_) < 1:
+                            print("You don't have enough credits to process a lookup. "
+                                  "You need at least 2 credits to process a lookup.")
+                            continue
+
+                        if pcost > int(credits_):
+                            print("Warning: Depending on search results,"
+                                  " you may not have enough credits for this transaction.")
+                            continue
+
+                        if confirm(f"This transaction has a potential cost of {pcost} credits. "
+                                   f"You have a balance of {credits_} credits. Continue?"):
+                            hash_lookup(apikey, hashes, parsed.outfile, parsed.p, parsed.verbose)
+                        else:
+                            print("Lookup transaction canceled.")
+                except SystemExit:
+                    pass
+            else:
+                print("API key is required for this action.")
+        elif cmd[0:5] == "hints":
+            args = cmd[5:]
+
+            parser = argparse.ArgumentParser(
+                description='Get hints for job ID.',
+                prog='hints'
+            )
+            parser.add_argument(
+                "-jobid",
+                help="Job ID to get hints for.",
+                required=True
+            )
+            try:
+                parsed = parser.parse_args(shlex.split(args))
+                data = []
+
+                for j in get_jobs(apikey):
+                    if str(j["id"]) == parsed.jobid:
+                        data.append(j)
+
+                if len(data) == 0:
+                    print(f"{parsed.jobid} is an invalid job id.")
+                else:
+                    for hints in data:
+                        hints_ = hints.get("hints", None)
+                        if hints_ is None:
+                            print("Hints are disabled for your usergroup.")
+                        elif hints_ != "":
+                            print(f"Hints for job id {parsed.jobid}:")
+                            print(hints_)
+                        else:
+                            print(f"No available hints for job id {parsed.jobid}.")
+            except SystemExit:
+                pass
+        elif cmd[0:9] == "websocket":
+            args = cmd[9:]
+
+            parser = argparse.ArgumentParser(
+                description='Connect to hashes.com Websocket API.',
+                prog='websocket'
+            )
+            parser.add_argument(
+                "-hook",
+                help="Name of hook file. (Must be stored in same dir)",
+                required=True
+            )
+            try:
+                parsed = parser.parse_args(shlex.split(args))
+                try:
+                    asyncio.run(main(apikey, parsed.hook))
+                except KeyboardInterrupt:
+                    print("\nDisconnected from hashes.com Websocket API.")
+            except SystemExit:
+                pass
+        elif cmd[0:7] == "balance":
+            if apikey is not None:
+                get_escrow_balance(apikey)
+            else:
+                print("API key is required for this action.")
+        elif cmd == "withdrawals":
+            if apikey is not None:
+                withdraw_requests(apikey)
+            else:
+                print("API key is required for this action.")
+        elif cmd[0:6] == "logout":
+            if session is not None:
+                session = None
+                print("Logged out.")
+            else:
+                print("You are not logged in.")
+        elif cmd[0:5] == "clear":
+            os.system('cls||clear')
+        elif cmd[0:4] == "exit":
+            break
+        elif cmd.replace(" ", "") == "":
+            show.show_table_start()
+        else:
+            print("The command you entered is unknown")
+            show.show_table_start()
 except KeyboardInterrupt:
-	False
+    pass
