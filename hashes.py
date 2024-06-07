@@ -287,7 +287,7 @@ def login(
         os.remove(f"captcha_{captcha_time}.jpg")
         if rememberme_:
             with open("session.txt", "w", encoding="utf-8") as sessionfile_:
-                sessionfile_.write(json.dumps(session_.cookies))
+                json.dump(requests.utils.dict_from_cookiejar(session_.cookies), sessionfile_)
             print("Wrote session data to: session.txt")
         return session_
 
@@ -691,8 +691,8 @@ if os.path.exists("session.txt"):
         session = requests.session()
 
         with open("session.txt", "rb") as sessionfile:
-            json_data = json.loads(sessionfile.read())
-            session.cookies.update(json_data)
+            cookies = requests.utils.cookiejar_from_dict(json.load(sessionfile))
+            session.cookies.update(cookies)
 
         print("Loaded existing session from session.txt")
     else:
