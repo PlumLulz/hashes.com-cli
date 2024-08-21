@@ -16,6 +16,7 @@ validalgs = {
     "124": "Django (SHA-1)",
     "130": "sha1(utf16le($plaintext).$salt)",
     "140": "sha1($salt.utf16le($plaintext))",
+    "160": "HMAC-SHA1 (key = $salt)",
     "170": "SHA1(UTF16-LE($plaintext))",
     "200": "MySQL323",
     "220": "sha1DASH sha1(--$salt--$plaintext--)",
