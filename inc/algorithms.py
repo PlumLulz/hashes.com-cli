@@ -51,6 +51,7 @@ validalgs = {
     "2811": "MyBB 1.2+, IPB2+ (Invision Power Board)",
     "3000": "LM",
     "3200": "bcrypt $2*$, Blowfish (Unix)",
+    "3910": "md5(md5($plaintext).md5($salt))",
     "4110": "md5($salt.md5($plaintext.$salt))",
     "4400": "md5(sha1($plaintext))",
     "5100": "Half MD5",
