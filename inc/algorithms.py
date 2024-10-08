@@ -23,6 +23,7 @@ validalgs = {
     "221": "sha1(eMinor--$saltsha1(eMinor--$plaintext--})--})",
     "300": "MySQL4.1/MySQL5",
     "400": "phpass, phpBB3 (MD5), Joomla >= 2.5.18 (MD5), WordPress (MD5)",
+    "401": "phpass(MD5($plaintext))/PHPBB3MD5",
     "500": "md5crypt, MD5 (Unix), Cisco-IOS $1$ (MD5), Cisco-IOS $1$ (MD5)",
     "900": "MD4",
     "1000": "NTLM",
