@@ -67,6 +67,7 @@ validalgs = {
     "7100": "macOS v10.8+ (PBKDF2-SHA512)",
     "7300": "IPMI2 RAKP HMAC-SHA1",
     "7400": "sha256crypt $5$, SHA256 (Unix)",
+    "7401": "MySQL $A$ (sha256crypt)",
     "7500": "Kerberos 5 AS-REQ Pre-Auth etype 23",
     "7900": "Drupal7",
     "8800": "Android FDE <= 4.3",
