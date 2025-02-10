@@ -425,15 +425,9 @@ def hash_lookup(hashes, outfile, printr, verbose):
 # Converts crypto to USD values
 def to_usd(value, currency):
 	if currency != "credits":
-		url = "https://api.kraken.com/0/public/Ticker?pair=%susd" % (currency)
+		url = "https://hashes.com/en/api/conversion"
 		resp = requests.get(url).json()
-		#currentprice = resp['USD']
-		if currency.upper() == "BTC":
-			currentprice = resp['result']['XXBTZUSD']['a'][0]
-		elif currency.upper() == "XMR":
-			currentprice = resp['result']['XXMRZUSD']['a'][0]
-		elif currency.upper() == "LTC":
-			currentprice = resp['result']['XLTCZUSD']['a'][0]
+		currentprice = resp[currency.upper()]
 		converted = "${0:.3f}".format(float(value) * float(currentprice))
 		return {"currentprice": currentprice, "converted": converted}
 	else:
