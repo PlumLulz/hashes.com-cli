@@ -176,6 +176,7 @@ validalgs = {
     "25600": "bcrypt(md5($plaintext))",
     "26000": "Mozilla key3.db",
     "26100": "Mozilla key4.db",
+    "26300": "FortiGate256 (FortiOS256)",
     "26600": "MetaMask Wallet",
     "26610": "MetaMask Wallet (short hash, plaintext check)",
     "27700": "MultiBit Classic .wallet (scrypt)",
