@@ -183,6 +183,7 @@ validalgs = {
     "28200": "Exodus Desktop Wallet (scrypt)",
     "28800": "Kerberos 5, etype 17, DB",
     "28900": "Kerberos 5, etype 18, DB",
+    "29200": "Radmin3",
     "99829": ".DMG Encryption",
     "99849": "Yescrypt $y$"
 }
