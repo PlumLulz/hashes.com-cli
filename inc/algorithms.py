@@ -122,6 +122,7 @@ validalgs = {
     "16600": "Electrum Wallet (Salt-Type 1-3)",
     "16700": "FileVault 2",
     "16800": "WPA-PMKID-PBKDF2",
+    "16900": "Ansible Vault",
     "17010": "GPG (AES-128/AES-256 (SHA-1($plaintext)))",
     "17200": "PKZIP (Compressed)",
     "17210": "PKZIP (Uncompressed)",
