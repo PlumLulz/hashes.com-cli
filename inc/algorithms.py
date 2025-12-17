@@ -149,6 +149,7 @@ validalgs = {
     "20710": "sha256(sha256($plaintext).$salt)",
     "20711": "AuthMe sha256",
     "20800": "sha256(md5($plaintext))",
+    "20802": "sha256(md5($salt.$plaintext))",
     "20900": "md5(sha1($plaintext).md5($plaintext).sha1($plaintext)) ",
     "21100": "sha1(md5($plaintext.$salt))",
     "21200": "md5(sha1($salt).md5($plaintext))",
