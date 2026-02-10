@@ -60,6 +60,8 @@ validalgs = {
     "5100": "Half MD5",
     "5200": "Password Safe v3 pwsafe3",
     "5600": "NetNTLMv2",
+    "6000": "RIPEMD-160",
+    "6060": "HMAC-RIPEMD160 (key = $salt)",
     "6100": "Whirlpool",
     "6600": "1Password, agilekeychain",
     "6700": "AIX {ssha1}",
