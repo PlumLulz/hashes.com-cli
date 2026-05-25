@@ -441,7 +441,7 @@ def recent_logins(limit = None):
 	loginhistory = bs.find("table", { "class" : "table table-hover table-striped" })
 	loginhistory.find("thead", { "class": "fw-bolder"}).decompose()
 	table = PrettyTable()
-	table.field_names = ["Created", "Status", "IP Addres", "Location"]
+	table.field_names = ["Created", "Status", "IP Address", "Location"]
 	table.align = "l"
 	for row in loginhistory.findAll("tr")[0:limit]:
 		cells = row.findAll("td")
