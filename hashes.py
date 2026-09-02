@@ -28,7 +28,7 @@ else:
 # Returns json of current jobs in escrow
 def get_jobs(sortby = 'createdAt', algid = None, reverse = True, currency = None, self = False):
 	if self == True:
-		url = "https://hashes.com/en/api/jobs_self"
+		url = "https://hashes.com/en/api/jobs_self?key=%s" % (apikey)
 	else:
 		url = "https://hashes.com/en/api/jobs?key=%s" % (apikey)
 	json1 = requests.get(url).json()
@@ -48,6 +48,8 @@ def get_jobs(sortby = 'createdAt', algid = None, reverse = True, currency = None
 			json1 = json2
 		json1 = sorted(json1, key=lambda x : x[sortby], reverse=reverse)
 		return json1
+	else:
+		print("Error while getting jobs: %s" % (json1['message']))
 
 # Downloads or prints jobs in escrow
 def download(jobid, algid, file, printr, currency):
@@ -554,6 +556,7 @@ try:
 				g.add_argument("-algid", help='Algorithm to filter jobs by. Multiple can be given e.g. 20,300,220', default=None)
 				g.add_argument("-jobid", help='Job ID to filter jobs by. Multiple can be given e.g. 1,2,3,4,5', default=None)
 				g.add_argument("-self", help='Search jobs you have created.', action='store_true')
+				jobs_se = False
 				try:
 					parsed = parser.parse_args(shlex.split(args))
 					if parsed.algid is not None:
@@ -595,6 +598,7 @@ try:
 					limit = parsed.limit
 				except SystemExit:
 					jobs = False
+					jobs_se = True
 					None
 			else:
 				jobs = get_jobs()
@@ -624,7 +628,8 @@ try:
 					table.add_row([created, ids, algorithm, total, found, left, maxcracks, currency, price, hints])
 				print(table)
 			else:
-				print ("No jobs found.")
+				if jobs_se == False:
+					print ("No jobs found.")
 		if cmd[0:8] == "download":
 			args = cmd[8:]
 			parser = argparse.ArgumentParser(description='Download escrow jobs from hashes.com', prog='download')
