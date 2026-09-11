@@ -191,6 +191,7 @@ validalgs = {
     "28900": "Kerberos 5, etype 18, DB",
     "29200": "Radmin3",
     "30600": "bcrypt(sha256($plaintext))",
+    "35500": "WordPress bcrypt(hmac-sha384($plaintext))",
     "35800": "Legacy Symfony",
     "99829": ".DMG Encryption",
     "99849": "Yescrypt $y$"
