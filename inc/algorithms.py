@@ -195,6 +195,7 @@ validalgs = {
     "34301": "KeePass AESKDF (KDBX v4)",
     "35500": "WordPress bcrypt(hmac-sha384($plaintext))",
     "35800": "Legacy Symfony",
+    "36800": "OpenSSH Private Keys (bcrypt-pbkdf)",
     "99829": ".DMG Encryption",
     "99849": "Yescrypt $y$"
 }
